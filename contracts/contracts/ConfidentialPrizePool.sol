@@ -111,6 +111,9 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// Public prize amount used for the next draw.
     uint64 public prizePerDraw;
 
+    /// Set once, by `_seed()`, on the first state-mutating call.
+    bool private _seeded;
+
     // ---------------------------------------------------------------------
     // Events / errors
     // ---------------------------------------------------------------------
@@ -154,14 +157,28 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         prizePerDraw = prizePerDraw_;
         epochStartedAt = uint48(block.timestamp);
         _totalLastAt = uint48(block.timestamp);
+        // NOTE: no FHE calls here — see `_seed()`.
+    }
 
-        // Initialise every aggregate handle. Operating on an uninitialised
-        // ciphertext yields a zero handle and silently corrupts downstream
-        // arithmetic, so all of these are explicitly set.
+    /// @dev Initialise the aggregate ciphertexts on first use.
+    ///
+    /// Operating on an uninitialised handle yields a zero handle and silently
+    /// corrupts downstream arithmetic, so these must be set before anything
+    /// touches them. They are deliberately NOT set in the constructor: FHE
+    /// calls at construction time require the coprocessor to be reachable
+    /// during deployment, which makes the contract undeployable on any chain
+    /// where it is not (and reverts with no reason string, which is a miserable
+    /// thing to debug). Seeding lazily costs the first caller four trivial
+    /// encrypts — 32 HCU each — and makes deployment inert.
+    function _seed() private {
+        if (_seeded) return;
+        _seeded = true;
+
         _totalShares = FHE.asEuint64(0);
         _totalCumCur = FHE.asEuint64(0);
         _totalCumPrev = FHE.asEuint64(0);
         _reserve = FHE.asEuint64(0);
+
         FHE.allowThis(_totalShares);
         FHE.allowThis(_totalCumCur);
         FHE.allowThis(_totalCumPrev);
@@ -276,6 +293,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// @dev Caller must first grant this contract operator rights on the token:
     /// `cUSD.setOperator(pool, expiry)`.
     function deposit(externalEuint64 encAmount, bytes calldata inputProof) external {
+        _seed();
         euint64 requested = FHE.fromExternal(encAmount, inputProof);
         FHE.allowTransient(requested, address(token));
 
@@ -299,6 +317,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// @notice Withdraw principal. Available at any time — this is the no-loss
     /// guarantee, and it holds during an open draw too.
     function withdraw(externalEuint64 encAmount, bytes calldata inputProof) external {
+        _seed();
         euint64 requested = FHE.fromExternal(encAmount, inputProof);
 
         _accrueTotal(uint48(block.timestamp));
@@ -324,6 +343,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
 
     /// @notice Sweep unclaimed winnings to the caller as cUSD.
     function claim() external {
+        _seed();
         euint64 amount = _winnings[msg.sender];
         if (!FHE.isInitialized(amount)) return;
 
@@ -344,6 +364,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// @notice Fund the prize reserve with cUSD. Kept strictly separate from
     /// principal — prizes are never paid out of depositors' capital.
     function fundPrize(externalEuint64 encAmount, bytes calldata inputProof) external {
+        _seed();
         euint64 requested = FHE.fromExternal(encAmount, inputProof);
         FHE.allowTransient(requested, address(token));
 
@@ -373,6 +394,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// transaction that advances the epoch, and `draws[e]` is write-once — so
     /// there is no way to resample an unfavourable draw.
     function closeEpoch() external {
+        _seed();
         uint48 closesAt = epochEndsAt();
         if (block.timestamp < closesAt) revert EpochNotOver(closesAt);
 
@@ -447,6 +469,7 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         if (!d.awarded) revert DrawNotAwarded(epochId);
         // One-epoch claim window, forced by the bounded TWAB lookback.
         if (epochId + 1 != epoch) revert ClaimWindowClosed(epochId);
+        _seed();
         if (checked[epochId][msg.sender]) revert AlreadyChecked(epochId);
         checked[epochId][msg.sender] = true;
 

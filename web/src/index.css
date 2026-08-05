@@ -1,0 +1,40 @@
+@import "tailwindcss";
+@import "@rainbow-me/rainbowkit/styles.css";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 600px at 15% -10%, oklch(0.35 0.12 265 / 0.5), transparent 60%),
+    radial-gradient(900px 500px at 95% 0%, oklch(0.4 0.13 195 / 0.35), transparent 55%),
+    oklch(0.16 0.02 265);
+  color: oklch(0.95 0.01 265);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Encrypted values are shown as a redacted shimmer until decrypted, so the UI
+   makes the confidentiality model visible rather than just claiming it. */
+@keyframes cipher-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+
+.cipher {
+  background: linear-gradient(
+    90deg,
+    oklch(0.4 0.05 265 / 0.8),
+    oklch(0.55 0.09 285 / 0.9),
+    oklch(0.4 0.05 265 / 0.8)
+  );
+  background-size: 200% 100%;
+  animation: cipher-shimmer 2.4s linear infinite;
+  border-radius: 0.375rem;
+  color: transparent;
+  user-select: none;
+}

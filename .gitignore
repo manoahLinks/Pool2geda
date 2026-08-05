@@ -26,3 +26,6 @@ web/node_modules/
 .vscode/
 *.swp
 *.log
+
+# ts build cache
+*.tsbuildinfo

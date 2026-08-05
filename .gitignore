@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# hardhat
+contracts/artifacts/
+contracts/cache/
+contracts/types/
+contracts/coverage/
+contracts/coverage.json
+contracts/dist/
+contracts/fhevmTemp/
+
+# vite / next
+web/dist/
+web/.vite/
+web/node_modules/
+
+# env — never commit keys
+.env
+.env.*
+!.env.example
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log

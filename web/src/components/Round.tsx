@@ -26,7 +26,7 @@ export function Round({ onDone }: { onDone: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const sdk = useZamaSdk();
+  const { ready, getSdk } = useZamaSdk();
   const c = contracts!;
 
   const [busy, setBusy] = useState<null | "decrypting" | "awarding">(null);
@@ -60,7 +60,7 @@ export function Round({ onDone }: { onDone: () => void }) {
 
   async function settle() {
     setError(null);
-    if (last === null || !sdk || !walletClient || !publicClient) return;
+    if (last === null || !ready || !walletClient || !publicClient) return;
     try {
       const [totalHandle, randHandle] = (await Promise.all([
         publicClient.readContract({
@@ -75,6 +75,7 @@ export function Round({ onDone }: { onDone: () => void }) {
 
       // Order is bound into the proof and must match the contract's cts array.
       setBusy("decrypting");
+      const sdk = await getSdk();
       const res = await publicDecryptWithRetry(sdk, [totalHandle, randHandle]);
 
       setBusy("awarding");

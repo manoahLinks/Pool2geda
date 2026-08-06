@@ -13,7 +13,7 @@ import { explainError } from "@/lib/errors";
 /// never shown against a new ciphertext — which would be worse than showing
 /// nothing.
 export function useSecret(handle: Hex | undefined, contractAddress: Address) {
-  const sdk = useZamaSdk();
+  const { ready, getSdk } = useZamaSdk();
   const { address } = useAccount();
   const [value, setValue] = useState<bigint | null>(null);
   const [busy, setBusy] = useState(false);
@@ -32,20 +32,21 @@ export function useSecret(handle: Hex | undefined, contractAddress: Address) {
       setValue(0n);
       return;
     }
-    if (!sdk) {
+    if (!ready) {
       setError("Connect a wallet first.");
       return;
     }
     setBusy(true);
     setError(null);
     try {
+      const sdk = await getSdk();
       setValue(await userDecryptOne(sdk, handle, contractAddress));
     } catch (e) {
       setError(explainError(e));
     } finally {
       setBusy(false);
     }
-  }, [sdk, handle, contractAddress]);
+  }, [ready, getSdk, handle, contractAddress]);
 
   return { value, busy, error, reveal, hide: () => setValue(null) };
 }

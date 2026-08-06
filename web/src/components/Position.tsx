@@ -16,7 +16,7 @@ export function Position({ onDone }: { onDone: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const sdk = useZamaSdk();
+  const { ready, getSdk } = useZamaSdk();
   const c = contracts!;
 
   const [amount, setAmount] = useState("");
@@ -38,7 +38,7 @@ export function Position({ onDone }: { onDone: () => void }) {
 
   async function withdraw() {
     setError(null);
-    if (!sdk || !walletClient || !publicClient || !address) {
+    if (!ready || !walletClient || !publicClient || !address) {
       setError("Connect a wallet first.");
       return;
     }
@@ -48,6 +48,7 @@ export function Position({ onDone }: { onDone: () => void }) {
 
     try {
       setBusy("encrypting");
+      const sdk = await getSdk();
       const { encryptedValues, inputProof } = await sdk.encrypt({
         values: [{ value, type: "euint64" }],
         contractAddress: c.prizePool,

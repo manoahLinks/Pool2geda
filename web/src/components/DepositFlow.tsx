@@ -61,7 +61,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
   const { address } = useAccount();
   const publicClient = usePublicClient();
   const { data: walletClient } = useWalletClient();
-  const sdk = useZamaSdk();
+  const { ready, getSdk } = useZamaSdk();
   const c = contracts!;
 
   const [wrapAmount, setWrapAmount] = useState("");
@@ -115,7 +115,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
 
   async function deposit() {
     setError(null);
-    if (!sdk || !walletClient || !publicClient || !address) {
+    if (!ready || !walletClient || !publicClient || !address) {
       setError("Connect a wallet first.");
       return;
     }
@@ -128,6 +128,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
       // goes on-chain is a ciphertext plus a proof binding it to this contract
       // and this sender.
       setBusy("encrypting");
+      const sdk = await getSdk();
       const { encryptedValues, inputProof } = await sdk.encrypt({
         values: [{ value, type: "euint64" }],
         contractAddress: c.prizePool,

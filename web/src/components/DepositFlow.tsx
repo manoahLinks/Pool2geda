@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useWalletClient } from "wagmi";
 import type { Abi } from "viem";
-import { Card, Button, AmountField, Notice } from "@/components/ui";
+import { Panel, Button, AmountField, Notice } from "@/components/ui";
 import { useZamaSdk } from "@/hooks/useZamaSdk";
 import { useTx } from "@/hooks/useTx";
 import { contracts, OPERATOR_EXPIRY } from "@/config/contracts";
@@ -33,32 +33,26 @@ function Step({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-t border-white/[0.06] first:border-t-0">
-      <button
-        onClick={onOpen}
-        className="flex w-full items-center gap-3 py-3 text-left"
-      >
+    <div className="border-t border-ink/10 first:border-t-0">
+      <button onClick={onOpen} className="flex w-full items-baseline gap-3 py-2.5 text-left">
         <span
           className={
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full font-mono text-[10px] " +
-            (done
-              ? "bg-reveal/15 text-reveal"
-              : open
-                ? "bg-seal text-white"
-                : "bg-white/[0.06] text-mist/60")
+            "font-mono text-[10px] tabular-nums " +
+            (done ? "text-carmine" : open ? "text-ink" : "text-faint/60")
           }
         >
-          {done ? "✓" : n}
+          {done ? "✓" : `0${n}`}
         </span>
         <span
           className={
-            "text-sm " + (done && !open ? "text-mist/60" : "text-white/90")
+            "serif-caps text-[10px] " +
+            (done && !open ? "text-faint" : open ? "text-ink" : "text-ink/70")
           }
         >
           {title}
         </span>
       </button>
-      {open && <div className="space-y-3 pb-4 pl-8">{children}</div>}
+      {open && <div className="space-y-3 pb-4 pl-7">{children}</div>}
     </div>
   );
 }
@@ -159,13 +153,13 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <Card label="Deposit">
+    <Panel caption="Subscription">
       <div>
         <Step
           n={1} title="Get test tokens" done={hasUsd || hasPrivate}
           open={step === 1} onOpen={() => setManualStep(step === 1 ? null : 1)}
         >
-          <p className="text-xs text-mist">
+          <p className="text-[12.5px] leading-relaxed text-ink/70">
             tUSD is the pool's underlying token. Public — anyone can see this
             balance. You hold {formatUnits((usdBal as bigint) ?? 0n)}.
           </p>
@@ -187,7 +181,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
           n={2} title="Convert to a private balance" done={hasPrivate}
           open={step === 2} onOpen={() => setManualStep(step === 2 ? null : 2)}
         >
-          <p className="text-xs text-mist">
+          <p className="text-[12.5px] leading-relaxed text-ink/70">
             This is the last step anyone can see. The amount you convert is
             public; everything you do after it is not.
           </p>
@@ -235,7 +229,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
           n={3} title="Allow the pool" done={granted}
           open={step === 3} onOpen={() => setManualStep(step === 3 ? null : 3)}
         >
-          <p className="text-xs text-mist">
+          <p className="text-[12.5px] leading-relaxed text-ink/70">
             A one-time permission, not an amount. The pool can only move what
             you explicitly deposit, and you can withdraw at any time.
           </p>
@@ -259,7 +253,7 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
         >
           <AmountField
             value={depositAmount} onChange={setDepositAmount}
-            suffix="private" disabled={busy !== null}
+            suffix="sealed" disabled={busy !== null}
           />
           <Button busy={busy !== null} disabled={!depositAmount} onClick={deposit}>
             {busy === "encrypting" ? "Encrypting…" : busy === "sending" ? "Confirming…" : "Deposit"}
@@ -273,6 +267,6 @@ export function DepositFlow({ onDone }: { onDone: () => void }) {
           {error && <Notice kind="error">{error}</Notice>}
         </Step>
       </div>
-    </Card>
+    </Panel>
   );
 }

@@ -1,25 +1,29 @@
 import type { ReactNode } from "react";
+import { GuillocheBand } from "@/components/Guilloche";
 
-export function Card({
-  label,
+/// A panel on the certificate. Engraved rule above, small-caps caption — the
+/// way a section is titled on a share certificate rather than a dashboard.
+export function Panel({
+  caption,
   children,
   className = "",
 }: {
-  label?: string;
+  caption?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section
       className={
-        "rounded-2xl border border-white/[0.08] bg-vault/70 p-5 backdrop-blur-sm " +
+        "border border-ink/15 bg-stock-2/40 px-5 py-4 shadow-[0_1px_0_rgba(18,33,27,0.06)] " +
         className
       }
     >
-      {label && (
-        <h2 className="mb-4 font-mono text-[11px] tracking-[0.14em] text-mist/70 uppercase">
-          {label}
-        </h2>
+      {caption && (
+        <div className="mb-3 flex items-center gap-3">
+          <h2 className="serif-caps text-[10px] text-bank">{caption}</h2>
+          <span className="h-px flex-1 bg-ink/12" />
+        </div>
       )}
       {children}
     </section>
@@ -46,16 +50,16 @@ export function Button({
       onClick={onClick}
       disabled={disabled || busy}
       className={
-        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition " +
+        "serif-caps inline-flex items-center justify-center gap-2 border transition " +
         "disabled:cursor-not-allowed disabled:opacity-35 " +
-        (size === "lg" ? "px-6 py-3 text-base " : "px-4 py-2 text-sm ") +
+        (size === "lg" ? "px-6 py-3 text-[11px] " : "px-4 py-2 text-[10px] ") +
         (variant === "primary"
-          ? "bg-seal text-white hover:bg-seal/85 active:bg-seal/95"
-          : "border border-white/12 text-mist hover:border-white/25 hover:text-white")
+          ? "border-ink bg-ink text-stock hover:bg-bank hover:border-bank"
+          : "border-ink/30 text-ink hover:border-ink hover:bg-ink/[0.04]")
       }
     >
       {busy && (
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+        <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
       )}
       {children}
     </button>
@@ -76,16 +80,18 @@ export function AmountField({
   placeholder?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-xl border border-white/12 bg-black/30 px-3.5 py-2.5 focus-within:border-seal/60">
+    <div className="flex items-baseline gap-2 border-b border-ink/25 px-1 py-1.5 focus-within:border-ink">
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         inputMode="decimal"
-        className="w-full bg-transparent font-mono text-base outline-none placeholder:text-mist/30 disabled:opacity-50"
+        className="w-full bg-transparent font-mono text-lg tabular-nums outline-none placeholder:text-faint/50 disabled:opacity-50"
       />
-      {suffix && <span className="font-mono text-xs text-mist/60">{suffix}</span>}
+      {suffix && (
+        <span className="serif-caps shrink-0 text-[9px] text-faint">{suffix}</span>
+      )}
     </div>
   );
 }
@@ -100,10 +106,10 @@ export function Notice({
   return (
     <div
       className={
-        "rounded-xl border px-3.5 py-2.5 text-xs leading-relaxed " +
+        "border-l-2 py-1.5 pl-3 text-[12px] leading-relaxed " +
         (kind === "error"
-          ? "border-rose-400/25 bg-rose-400/[0.08] text-rose-200"
-          : "border-white/10 bg-white/[0.03] text-mist")
+          ? "border-carmine bg-carmine/[0.05] text-carmine"
+          : "border-bank/40 text-faint")
       }
     >
       {children}
@@ -111,13 +117,11 @@ export function Notice({
   );
 }
 
-/// A value that lives on-chain as a ciphertext.
+/// A value the chain holds as ciphertext.
 ///
-/// Shows the real handle, hatched and unreadable, until the holder decrypts it
-/// — then it resolves in gold. The point is that you can see the chain holds
-/// something and that only your wallet turns it into a number. A UI that
-/// silently decrypts everything on load looks identical to one with no
-/// encryption at all.
+/// Sealed, it is drawn as guilloche generated from the handle itself — the
+/// same role the lathe-work plays on a banknote: intricate, precise, and
+/// impossible to read back. Decryption strikes the figure onto the paper.
 export function Sealed({
   handle,
   value,
@@ -133,52 +137,63 @@ export function Sealed({
   suffix?: string;
   size?: "sm" | "md" | "lg";
 }) {
-  const text =
-    size === "lg" ? "text-3xl" : size === "sm" ? "text-sm" : "text-lg";
+  const dims =
+    size === "lg"
+      ? { w: 210, h: 34, text: "text-4xl" }
+      : size === "sm"
+        ? { w: 120, h: 20, text: "text-base" }
+        : { w: 165, h: 26, text: "text-2xl" };
 
   if (value !== null) {
     return (
-      <span className={`unsealed font-mono ${text} tabular-nums`}>
+      <span className={`struck engraved ${dims.text} text-ink`}>
         {value.toString()}
-        {suffix && <span className="ml-1 text-xs text-reveal/60">{suffix}</span>}
+        {suffix && (
+          <span className="serif-caps ml-1.5 align-middle text-[9px] text-faint">
+            {suffix}
+          </span>
+        )}
       </span>
     );
   }
-
-  const glyphs = handle ? handle.slice(2, 14) : "············";
 
   return (
     <button
       onClick={onReveal}
       disabled={busy || !onReveal}
-      title={onReveal ? "Decrypt with your wallet" : "Only the holder can read this"}
+      title={onReveal ? "Decrypt with your key" : "Only the holder can read this"}
       className="group inline-flex items-center gap-2.5 disabled:cursor-default"
     >
-      <span className={`sealed px-2 py-0.5 font-mono ${text} tracking-tight`}>
-        {glyphs}
-      </span>
+      <GuillocheBand
+        seed={handle}
+        width={dims.w}
+        height={dims.h}
+        className="text-bank"
+      />
       {onReveal && (
-        <span className="font-mono text-[11px] tracking-wide text-seal group-hover:text-reveal">
-          {busy ? "decrypting…" : "decrypt"}
+        <span className="serif-caps text-[9px] text-carmine group-hover:text-ink">
+          {busy ? "decrypting" : "decrypt"}
         </span>
       )}
     </button>
   );
 }
 
-export function Stat({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
+export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="font-mono text-[11px] tracking-[0.12em] text-mist/60 uppercase">
-        {label}
-      </div>
+      <div className="serif-caps text-[9px] text-faint">{label}</div>
       <div className="mt-1.5">{children}</div>
     </div>
+  );
+}
+
+/// Serial numbers, printed in the corners the way a note carries its plate and
+/// series marks. Real values — the contract addresses actually in use.
+export function Serial({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="font-mono text-[9px] tracking-wider text-faint/70">
+      <span className="text-faint/50">{label}</span> {value}
+    </span>
   );
 }

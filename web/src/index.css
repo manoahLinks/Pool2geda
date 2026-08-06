@@ -2,84 +2,116 @@
 @import "@rainbow-me/rainbowkit/styles.css";
 
 /*
-  Colour carries meaning here, it is not decoration.
+  Security printing.
 
-    seal  (violet) — the value is a ciphertext. You cannot read it.
-    reveal (gold)  — the value is plaintext. Gold appears ONLY where something
-                     has actually been decrypted, or is public by design.
+  Banknotes and share certificates are the existing visual language for "this
+  represents money, and it cannot be forged or read by the wrong person" —
+  which is precisely this product. So: intaglio line work, engraved numerals,
+  serial numbers, and guilloche where a value is sealed.
 
-  So the page reads as mostly sealed, with gold arriving the moment you prove
-  you hold the key. Violet is anchored to PoolTogether's own palette; the gold
-  is what makes the confidentiality legible at a glance.
+  Deliberately not the crypto dark-mode default. Paper stock, not a void.
+
+    stock   — pale grey-green paper, the colour of unprinted security paper
+    ink     — the near-black green of intaglio plate ink
+    bank    — the mid green used for the engraved line work
+    carmine — reserved for stamps and cancellations only
 */
 @theme {
-  --color-ink: #0b0a14;
-  --color-vault: #17142b;
-  --color-vault-2: #1f1a3a;
-  --color-seal: #6c4df6;
-  --color-seal-dim: #2a2350;
-  --color-reveal: #f5c451;
-  --color-mist: #a9a3c7;
+  --color-stock: #e4e3d7;
+  --color-stock-2: #dbdacc;
+  --color-ink: #12211b;
+  --color-bank: #1f5c43;
+  --color-bank-2: #3d7a60;
+  --color-carmine: #8a1f2c;
+  --color-faint: #6b7a70;
 
-  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(900px 480px at 12% -8%, color-mix(in oklab, var(--color-seal) 22%, transparent), transparent 62%),
-    radial-gradient(700px 420px at 92% 4%, color-mix(in oklab, #2f7d8f 14%, transparent), transparent 58%),
-    var(--color-ink);
-  color: #ece9f8;
+  background-color: var(--color-stock);
+  /* The faint fibre and lathe texture of security paper. */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      transparent 0 3px,
+      color-mix(in oklab, var(--color-bank) 3%, transparent) 3px 4px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0 3px,
+      color-mix(in oklab, var(--color-bank) 2.5%, transparent) 3px 4px
+    );
+  color: var(--color-ink);
   font-family: var(--font-sans);
+  font-variation-settings: "wdth" 100;
   -webkit-font-smoothing: antialiased;
 }
 
-h1, h2, .display {
+.display {
   font-family: var(--font-display);
-  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 0, "WONK" 1, "opsz" 120;
+  letter-spacing: -0.025em;
 }
 
-/* A sealed value. Deliberately unreadable — the diagonal hatch reads as
-   "locked" rather than "loading", which a plain shimmer would imply. */
-.sealed {
-  background-image: repeating-linear-gradient(
-    115deg,
-    var(--color-seal-dim) 0px,
-    var(--color-seal-dim) 6px,
-    color-mix(in oklab, var(--color-seal) 34%, var(--color-seal-dim)) 6px,
-    color-mix(in oklab, var(--color-seal) 34%, var(--color-seal-dim)) 12px
-  );
-  color: transparent;
-  user-select: none;
-  border-radius: 4px;
+/* Engraved numerals: the plate-printed figures on a note. The subtle text
+   shadow is the ink relief, not a glow. */
+.engraved {
+  font-family: var(--font-display);
+  font-variation-settings: "SOFT" 0, "WONK" 0, "opsz" 144;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums lining-nums;
+  text-shadow: 0 1px 0 color-mix(in oklab, var(--color-stock) 70%, white);
 }
 
-/* The one orchestrated moment on the page: a value resolving from ciphertext
-   to plaintext. Short, once, and only on decrypt. */
-@keyframes unseal {
-  0%   { opacity: 0; filter: blur(6px); transform: translateY(2px); }
-  100% { opacity: 1; filter: blur(0);   transform: translateY(0); }
+/* Certificate rule — the double line that borders engraved documents. */
+.rule-double {
+  border-top: 1px solid color-mix(in oklab, var(--color-ink) 28%, transparent);
+  box-shadow: 0 3px 0 -2px color-mix(in oklab, var(--color-ink) 18%, transparent);
 }
-.unsealed {
-  animation: unseal 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
-  color: var(--color-reveal);
+
+.serif-caps {
+  font-family: var(--font-sans);
+  font-variation-settings: "wdth" 78;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+/* A cancellation stamp, rotated and bitten into the paper. */
+.stamp {
+  color: var(--color-carmine);
+  border: 2px solid color-mix(in oklab, var(--color-carmine) 65%, transparent);
+  border-radius: 3px;
+  transform: rotate(-6deg);
+  opacity: 0.86;
+}
+
+@keyframes plate-strike {
+  0%   { opacity: 0; transform: translateY(3px) scale(0.985); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.struck {
+  animation: plate-strike 300ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .unsealed { animation: none; }
+  .struck { animation: none; }
 }
 
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--color-reveal);
+  outline: 2px solid var(--color-carmine);
   outline-offset: 2px;
 }

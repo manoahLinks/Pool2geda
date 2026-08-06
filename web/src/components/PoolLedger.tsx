@@ -1,17 +1,17 @@
 import { useAccount } from "wagmi";
-import { Card, Sealed } from "@/components/ui";
+import type { Hex } from "viem";
+import { Panel, Sealed } from "@/components/ui";
 import { usePoolMembers } from "@/hooks/usePoolMembers";
 import { useSecret } from "@/hooks/useSecret";
 import { contracts } from "@/config/contracts";
 import { shortAddress } from "@/lib/format";
-import type { Hex } from "viem";
 
-/// The pool, as the chain actually stores it.
+/// The register of holders.
 ///
-/// Every row is a real depositor and their real stake ciphertext. You can see
-/// the pool is populated and that every figure in it is unreadable — except
-/// your own, which you hold the key to. This is the one thing here that could
-/// not exist on a transparent chain, so it gets to be the centrepiece.
+/// A share register lists who holds, and historically also how much. This one
+/// cannot: each stake is drawn as guilloche cut from its own ciphertext, so the
+/// register is complete and public while every figure in it stays private. Only
+/// your own line can be struck into figures, and only by you.
 export function PoolLedger({ refreshKey }: { refreshKey: unknown }) {
   const { address } = useAccount();
   const { members } = usePoolMembers(refreshKey);
@@ -23,29 +23,34 @@ export function PoolLedger({ refreshKey }: { refreshKey: unknown }) {
   const mySecret = useSecret(mine?.handle as Hex | undefined, c.prizePool);
 
   return (
-    <Card label="The pool">
+    <Panel caption="Register of holders">
       {members === null ? (
-        <p className="font-mono text-xs text-mist/50">reading the chain…</p>
+        <p className="font-mono text-xs text-faint">reading the register…</p>
       ) : members.length === 0 ? (
-        <p className="text-sm text-mist">
-          Nobody has deposited yet. The first stake will appear here — sealed.
+        <p className="text-[13px] leading-relaxed text-ink/70">
+          No stakes are entered yet. The first will appear here — sealed.
         </p>
       ) : (
-        <ul className="divide-y divide-white/[0.06]">
-          {members.map((m) => {
+        <ol className="divide-y divide-ink/10">
+          {members.map((m, i) => {
             const isMine = m.address.toLowerCase() === address?.toLowerCase();
             return (
               <li
                 key={m.address}
-                className="flex items-center justify-between gap-4 py-2.5"
+                className="flex items-center justify-between gap-4 py-2"
               >
-                <span
-                  className={
-                    "font-mono text-xs " +
-                    (isMine ? "text-reveal" : "text-mist/70")
-                  }
-                >
-                  {isMine ? "you" : shortAddress(m.address)}
+                <span className="flex items-baseline gap-3">
+                  <span className="font-mono text-[10px] text-faint/60 tabular-nums">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span
+                    className={
+                      "font-mono text-[11px] " +
+                      (isMine ? "font-medium text-carmine" : "text-ink/70")
+                    }
+                  >
+                    {isMine ? "bearer (you)" : shortAddress(m.address)}
+                  </span>
                 </span>
                 {isMine ? (
                   <Sealed
@@ -61,14 +66,14 @@ export function PoolLedger({ refreshKey }: { refreshKey: unknown }) {
               </li>
             );
           })}
-        </ul>
+        </ol>
       )}
 
-      <p className="mt-4 border-t border-white/[0.06] pt-3 text-xs leading-relaxed text-mist/60">
-        Those are the actual ciphertexts stored on-chain, not placeholders. Only
-        the holder of a stake can turn one into a number — the pool contract
-        cannot read them either.
+      <p className="mt-4 border-t border-ink/10 pt-3 text-[11.5px] leading-relaxed text-faint">
+        Each pattern is cut from the ciphertext that stake is actually stored as
+        on-chain — no two alike, none of them readable. The register proves the
+        pool is real without disclosing a single figure in it.
       </p>
-    </Card>
+    </Panel>
   );
 }

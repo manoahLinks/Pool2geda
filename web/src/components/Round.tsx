@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useWalletClient } from "wagmi";
 import type { Abi, Hex } from "viem";
-import { Card, Button, Notice } from "@/components/ui";
+import { Panel, Button, Notice } from "@/components/ui";
 import { useZamaSdk } from "@/hooks/useZamaSdk";
 import { useTx } from "@/hooks/useTx";
 import { contracts } from "@/config/contracts";
@@ -95,16 +95,16 @@ export function Round({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <Card label={`Round ${epoch?.toString() ?? "—"}`}>
+    <Panel caption={`Round ${epoch?.toString() ?? "—"}`}>
       <div className="space-y-3">
         {!expired ? (
-          <p className="text-sm text-mist">
+          <p className="text-[13px] leading-relaxed text-ink/75">
             This round is still running. When the timer runs out, anyone can
             close it.
           </p>
         ) : (
           <>
-            <p className="text-sm text-mist">Time is up. Close it to draw.</p>
+            <p className="text-[13px] leading-relaxed text-ink/75">Time is up. Close it to draw.</p>
             <Button
               busy={closeTx.busy}
               onClick={async () => {
@@ -122,8 +122,8 @@ export function Round({ onDone }: { onDone: () => void }) {
         )}
 
         {last !== null && draw && !draw.awarded && (
-          <div className="rounded-xl border border-seal/25 bg-seal/[0.07] p-3.5">
-            <p className="text-xs leading-relaxed text-mist">
+          <div className="border-l-2 border-bank/50 bg-bank/[0.05] py-2.5 pl-3">
+            <p className="text-[12px] leading-relaxed text-ink/70">
               Round {last.toString()} is closed but not settled. Settling fetches
               the decrypted round total and its randomness, then proves both to
               the contract.
@@ -137,16 +137,16 @@ export function Round({ onDone }: { onDone: () => void }) {
         )}
 
         {last !== null && draw?.awarded && (
-          <div className="rounded-xl border border-white/[0.08] bg-black/20 p-3.5">
+          <div className="border-l-2 border-ink/20 py-2.5 pl-3">
             {alreadyChecked ? (
-              <p className="text-xs leading-relaxed text-mist">
+              <p className="text-[12px] leading-relaxed text-ink/70">
                 You checked round {last.toString()}. Decrypt your winnings to see
                 how it went — the transaction gives nothing away, and costs the
                 same whether you won or not.
               </p>
             ) : (
               <>
-                <p className="text-xs leading-relaxed text-mist">
+                <p className="text-[12px] leading-relaxed text-ink/70">
                   Round {last.toString()} is settled. Find out how you did.
                 </p>
                 <div className="mt-3">
@@ -177,6 +177,6 @@ export function Round({ onDone }: { onDone: () => void }) {
           <Notice kind="error">{error ?? closeTx.error}</Notice>
         )}
       </div>
-    </Card>
+    </Panel>
   );
 }

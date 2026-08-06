@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useAccount, usePublicClient, useReadContract, useWalletClient } from "wagmi";
 import type { Abi, Hex } from "viem";
-import { Card, Button, AmountField, Notice, Sealed, Stat } from "@/components/ui";
+import { Panel, Button, AmountField, Notice, Sealed, Field } from "@/components/ui";
 import { useZamaSdk } from "@/hooks/useZamaSdk";
 import { useSecret } from "@/hooks/useSecret";
 import { useTx } from "@/hooks/useTx";
@@ -70,26 +70,26 @@ export function Position({ onDone }: { onDone: () => void }) {
   }
 
   return (
-    <Card label="Yours">
+    <Panel caption="Your holding">
       <div className="grid grid-cols-2 gap-5">
-        <Stat label="Stake">
+        <Field label="Stake">
           <Sealed
             handle={sharesHandle as string | undefined}
             value={shares.value} busy={shares.busy} onReveal={shares.reveal}
           />
-        </Stat>
-        <Stat label="Winnings">
+        </Field>
+        <Field label="Winnings">
           <Sealed
             handle={winningsHandle as string | undefined}
             value={winnings.value} busy={winnings.busy} onReveal={winnings.reveal}
           />
-        </Stat>
+        </Field>
       </div>
 
-      <div className="mt-5 space-y-3 border-t border-white/[0.06] pt-4">
+      <div className="rule-double mt-6 space-y-3 pt-4">
         <AmountField
           value={amount} onChange={setAmount}
-          suffix="private" disabled={busy !== null}
+          suffix="sealed" disabled={busy !== null}
         />
         <div className="flex flex-wrap gap-2">
           <Button variant="ghost" busy={busy !== null} disabled={!amount} onClick={withdraw}>
@@ -106,7 +106,7 @@ export function Position({ onDone }: { onDone: () => void }) {
             Move winnings out
           </Button>
         </div>
-        <p className="text-xs leading-relaxed text-mist/60">
+        <p className="text-[11.5px] leading-relaxed text-faint">
           Take out any amount, any time — including mid-round. Prizes are paid
           from a separate reserve, so your deposit is never at risk.
         </p>
@@ -119,6 +119,6 @@ export function Position({ onDone }: { onDone: () => void }) {
           </Notice>
         </div>
       )}
-    </Card>
+    </Panel>
   );
 }

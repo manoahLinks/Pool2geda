@@ -1,6 +1,31 @@
 @import "tailwindcss";
 @import "@rainbow-me/rainbowkit/styles.css";
 
+/*
+  Colour carries meaning here, it is not decoration.
+
+    seal  (violet) — the value is a ciphertext. You cannot read it.
+    reveal (gold)  — the value is plaintext. Gold appears ONLY where something
+                     has actually been decrypted, or is public by design.
+
+  So the page reads as mostly sealed, with gold arriving the moment you prove
+  you hold the key. Violet is anchored to PoolTogether's own palette; the gold
+  is what makes the confidentiality legible at a glance.
+*/
+@theme {
+  --color-ink: #0b0a14;
+  --color-vault: #17142b;
+  --color-vault-2: #1f1a3a;
+  --color-seal: #6c4df6;
+  --color-seal-dim: #2a2350;
+  --color-reveal: #f5c451;
+  --color-mist: #a9a3c7;
+
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
 :root {
   color-scheme: dark;
 }
@@ -9,32 +34,52 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(1100px 600px at 15% -10%, oklch(0.35 0.12 265 / 0.5), transparent 60%),
-    radial-gradient(900px 500px at 95% 0%, oklch(0.4 0.13 195 / 0.35), transparent 55%),
-    oklch(0.16 0.02 265);
-  color: oklch(0.95 0.01 265);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Inter, sans-serif;
+    radial-gradient(900px 480px at 12% -8%, color-mix(in oklab, var(--color-seal) 22%, transparent), transparent 62%),
+    radial-gradient(700px 420px at 92% 4%, color-mix(in oklab, #2f7d8f 14%, transparent), transparent 58%),
+    var(--color-ink);
+  color: #ece9f8;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
 }
 
-/* Encrypted values are shown as a redacted shimmer until decrypted, so the UI
-   makes the confidentiality model visible rather than just claiming it. */
-@keyframes cipher-shimmer {
-  0% { background-position: 0% 50%; }
-  100% { background-position: 200% 50%; }
+h1, h2, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
-.cipher {
-  background: linear-gradient(
-    90deg,
-    oklch(0.4 0.05 265 / 0.8),
-    oklch(0.55 0.09 285 / 0.9),
-    oklch(0.4 0.05 265 / 0.8)
+/* A sealed value. Deliberately unreadable — the diagonal hatch reads as
+   "locked" rather than "loading", which a plain shimmer would imply. */
+.sealed {
+  background-image: repeating-linear-gradient(
+    115deg,
+    var(--color-seal-dim) 0px,
+    var(--color-seal-dim) 6px,
+    color-mix(in oklab, var(--color-seal) 34%, var(--color-seal-dim)) 6px,
+    color-mix(in oklab, var(--color-seal) 34%, var(--color-seal-dim)) 12px
   );
-  background-size: 200% 100%;
-  animation: cipher-shimmer 2.4s linear infinite;
-  border-radius: 0.375rem;
   color: transparent;
   user-select: none;
+  border-radius: 4px;
+}
+
+/* The one orchestrated moment on the page: a value resolving from ciphertext
+   to plaintext. Short, once, and only on decrypt. */
+@keyframes unseal {
+  0%   { opacity: 0; filter: blur(6px); transform: translateY(2px); }
+  100% { opacity: 1; filter: blur(0);   transform: translateY(0); }
+}
+.unsealed {
+  animation: unseal 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  color: var(--color-reveal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .unsealed { animation: none; }
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-reveal);
+  outline-offset: 2px;
 }

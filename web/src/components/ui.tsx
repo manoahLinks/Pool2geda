@@ -1,42 +1,27 @@
 import type { ReactNode } from "react";
 
-export function Panel({
-  title,
-  step,
-  subtitle,
+export function Card({
+  label,
   children,
-  tone = "default",
+  className = "",
 }: {
-  title: string;
-  step?: number;
-  subtitle?: ReactNode;
+  label?: string;
   children: ReactNode;
-  tone?: "default" | "encrypted";
+  className?: string;
 }) {
   return (
     <section
       className={
-        "rounded-2xl border p-5 backdrop-blur " +
-        (tone === "encrypted"
-          ? "border-violet-400/25 bg-violet-400/[0.07]"
-          : "border-white/10 bg-white/5")
+        "rounded-2xl border border-white/[0.08] bg-vault/70 p-5 backdrop-blur-sm " +
+        className
       }
     >
-      <div className="flex items-baseline gap-2">
-        {step !== undefined && (
-          <span className="text-xs font-mono text-white/35">{step}</span>
-        )}
-        <h2 className="text-sm font-semibold tracking-wide text-white/90 uppercase">
-          {title}
+      {label && (
+        <h2 className="mb-4 font-mono text-[11px] tracking-[0.14em] text-mist/70 uppercase">
+          {label}
         </h2>
-        {tone === "encrypted" && (
-          <span className="ml-auto rounded-full bg-violet-400/15 px-2 py-0.5 text-[10px] font-medium tracking-wide text-violet-200 uppercase">
-            Encrypted
-          </span>
-        )}
-      </div>
-      {subtitle && <p className="mt-1 text-sm text-white/50">{subtitle}</p>}
-      <div className="mt-4 space-y-3">{children}</div>
+      )}
+      {children}
     </section>
   );
 }
@@ -47,27 +32,30 @@ export function Button({
   disabled,
   busy,
   variant = "primary",
+  size = "md",
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   busy?: boolean;
   variant?: "primary" | "ghost";
+  size?: "md" | "lg";
 }) {
   return (
     <button
       onClick={onClick}
       disabled={disabled || busy}
       className={
-        "inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition " +
-        "disabled:cursor-not-allowed disabled:opacity-40 " +
+        "inline-flex items-center justify-center gap-2 rounded-xl font-medium transition " +
+        "disabled:cursor-not-allowed disabled:opacity-35 " +
+        (size === "lg" ? "px-6 py-3 text-base " : "px-4 py-2 text-sm ") +
         (variant === "primary"
-          ? "bg-violet-500 text-white hover:bg-violet-400"
-          : "border border-white/15 text-white/80 hover:bg-white/5")
+          ? "bg-seal text-white hover:bg-seal/85 active:bg-seal/95"
+          : "border border-white/12 text-mist hover:border-white/25 hover:text-white")
       }
     >
       {busy && (
-        <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/25 border-t-white" />
       )}
       {children}
     </button>
@@ -77,96 +65,120 @@ export function Button({
 export function AmountField({
   value,
   onChange,
-  placeholder = "0.00",
   suffix,
   disabled,
+  placeholder = "0.00",
 }: {
   value: string;
   onChange: (v: string) => void;
-  placeholder?: string;
   suffix?: string;
   disabled?: boolean;
+  placeholder?: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-lg border border-white/15 bg-black/25 px-3 py-2">
+    <div className="flex items-center gap-2 rounded-xl border border-white/12 bg-black/30 px-3.5 py-2.5 focus-within:border-seal/60">
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         inputMode="decimal"
-        className="w-full bg-transparent text-sm outline-none placeholder:text-white/25 disabled:opacity-50"
+        className="w-full bg-transparent font-mono text-base outline-none placeholder:text-mist/30 disabled:opacity-50"
       />
-      {suffix && <span className="text-xs text-white/40">{suffix}</span>}
+      {suffix && <span className="font-mono text-xs text-mist/60">{suffix}</span>}
     </div>
   );
 }
 
 export function Notice({
-  kind,
+  kind = "info",
   children,
 }: {
-  kind: "error" | "info" | "success";
+  kind?: "error" | "info";
   children: ReactNode;
 }) {
-  const tone =
-    kind === "error"
-      ? "border-rose-400/30 bg-rose-400/10 text-rose-200"
-      : kind === "success"
-        ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200"
-        : "border-sky-400/25 bg-sky-400/10 text-sky-200";
   return (
-    <div className={`rounded-lg border px-3 py-2 text-xs leading-relaxed ${tone}`}>
+    <div
+      className={
+        "rounded-xl border px-3.5 py-2.5 text-xs leading-relaxed " +
+        (kind === "error"
+          ? "border-rose-400/25 bg-rose-400/[0.08] text-rose-200"
+          : "border-white/10 bg-white/[0.03] text-mist")
+      }
+    >
       {children}
     </div>
   );
 }
 
-/// Renders an encrypted value as a redacted shimmer until the holder decrypts
-/// it. The point is to make the confidentiality model visible rather than
-/// merely claimed — you can see that the chain holds a ciphertext, and that
-/// only your wallet turns it into a number.
-export function Secret({
+/// A value that lives on-chain as a ciphertext.
+///
+/// Shows the real handle, hatched and unreadable, until the holder decrypts it
+/// — then it resolves in gold. The point is that you can see the chain holds
+/// something and that only your wallet turns it into a number. A UI that
+/// silently decrypts everything on load looks identical to one with no
+/// encryption at all.
+export function Sealed({
+  handle,
   value,
-  onReveal,
   busy,
+  onReveal,
   suffix,
-  emptyLabel = "—",
+  size = "md",
 }: {
+  handle?: string;
   value: bigint | null;
-  onReveal: () => void;
   busy?: boolean;
+  onReveal?: () => void;
   suffix?: string;
-  emptyLabel?: string;
+  size?: "sm" | "md" | "lg";
 }) {
+  const text =
+    size === "lg" ? "text-3xl" : size === "sm" ? "text-sm" : "text-lg";
+
   if (value !== null) {
     return (
-      <span className="font-mono text-lg">
-        {value === 0n ? emptyLabel : value.toString()}
-        {suffix && <span className="ml-1 text-xs text-white/40">{suffix}</span>}
+      <span className={`unsealed font-mono ${text} tabular-nums`}>
+        {value.toString()}
+        {suffix && <span className="ml-1 text-xs text-reveal/60">{suffix}</span>}
       </span>
     );
   }
+
+  const glyphs = handle ? handle.slice(2, 14) : "············";
+
   return (
     <button
       onClick={onReveal}
-      disabled={busy}
-      title="Decrypt with your wallet"
-      className="group inline-flex items-center gap-2 disabled:opacity-60"
+      disabled={busy || !onReveal}
+      title={onReveal ? "Decrypt with your wallet" : "Only the holder can read this"}
+      className="group inline-flex items-center gap-2.5 disabled:cursor-default"
     >
-      <span className="cipher px-8 py-0.5 font-mono text-lg">••••••</span>
-      <span className="text-xs text-violet-300 group-hover:text-violet-200">
-        {busy ? "decrypting…" : "decrypt"}
+      <span className={`sealed px-2 py-0.5 font-mono ${text} tracking-tight`}>
+        {glyphs}
       </span>
+      {onReveal && (
+        <span className="font-mono text-[11px] tracking-wide text-seal group-hover:text-reveal">
+          {busy ? "decrypting…" : "decrypt"}
+        </span>
+      )}
     </button>
   );
 }
 
-export function Row({ label, children }: { label: string; children: ReactNode }) {
+export function Stat({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-xs text-white/45">{label}</span>
-      {children}
+    <div>
+      <div className="font-mono text-[11px] tracking-[0.12em] text-mist/60 uppercase">
+        {label}
+      </div>
+      <div className="mt-1.5">{children}</div>
     </div>
   );
 }

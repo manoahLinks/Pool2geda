@@ -225,14 +225,31 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     // TWAB accrual
     // ---------------------------------------------------------------------
 
-    /// @dev Bring the global accumulator up to `until`.
+    /// @dev Now, clamped to the end of the current epoch.
+    ///
+    /// An epoch can sit expired-but-unclosed for a while — `closeEpoch` is
+    /// permissionless, so nothing forces it to run the instant the timer
+    /// elapses. Any activity in that overrun window belongs to the NEXT epoch,
+    /// not the one whose timer already ran out. Clamping here is what keeps
+    /// that true; without it a deposit made during the overrun would push
+    /// `_totalLastAt` past the boundary, `closeEpoch`'s accrual would no-op,
+    /// and the epoch would settle with a zero TWAB total.
+    function _clampedNow() private view returns (uint48) {
+        uint48 cap = epochEndsAt();
+        uint48 nowTs = uint48(block.timestamp);
+        return nowTs > cap ? cap : nowTs;
+    }
+
+    /// @dev Bring the global accumulator up to `until`, never past the epoch end.
     function _accrueTotal(uint48 until) private {
-        if (until <= _totalLastAt) return;
-        uint64 elapsed = uint64(until - _totalLastAt);
+        uint48 cap = epochEndsAt();
+        uint48 to = until > cap ? cap : until;
+        if (to <= _totalLastAt) return;
+        uint64 elapsed = uint64(to - _totalLastAt);
         // Scalar multiply — `elapsed` is plaintext, so this is the cheap form.
         _totalCumCur = FHE.add(_totalCumCur, FHE.mul(_totalShares, elapsed));
         FHE.allowThis(_totalCumCur);
-        _totalLastAt = until;
+        _totalLastAt = to;
     }
 
     /// @dev Roll a user's two TWAB buckets forward to now. O(1) regardless of
@@ -244,21 +261,25 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         uint48 lastAt = _userLastAt[u];
         euint64 bal = _shares[u];
 
+        // Clamped so activity during an expired-but-unclosed epoch is credited
+        // to the next one rather than retroactively to the closing one.
+        uint48 nowTs = _clampedNow();
+
         if (!FHE.isInitialized(bal)) {
             // First touch: nothing has accrued yet.
             _cumCur[u] = FHE.asEuint64(0);
             _cumPrev[u] = FHE.asEuint64(0);
             FHE.allowThis(_cumCur[u]);
             FHE.allowThis(_cumPrev[u]);
-            _userLastAt[u] = uint48(block.timestamp);
+            _userLastAt[u] = nowTs;
             _userLastEpoch[u] = epoch;
             return;
         }
 
         if (lastEpoch == epoch) {
             // Same epoch — extend the current bucket.
-            if (block.timestamp > lastAt) {
-                _cumCur[u] = FHE.add(_cumCur[u], FHE.mul(bal, uint64(block.timestamp - lastAt)));
+            if (nowTs > lastAt) {
+                _cumCur[u] = FHE.add(_cumCur[u], FHE.mul(bal, uint64(nowTs - lastAt)));
             }
         } else {
             // Crossed at least one boundary. The balance was constant the whole
@@ -274,14 +295,14 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
                 _cumPrev[u] = FHE.mul(bal, uint64(epochDuration));
             }
             // And the current epoch, from its start.
-            _cumCur[u] = FHE.mul(bal, uint64(block.timestamp - epochStartedAt));
+            _cumCur[u] = FHE.mul(bal, uint64(nowTs - epochStartedAt));
         }
 
         FHE.allowThis(_cumCur[u]);
         FHE.allowThis(_cumPrev[u]);
         FHE.allow(_cumCur[u], u);
         FHE.allow(_cumPrev[u], u);
-        _userLastAt[u] = uint48(block.timestamp);
+        _userLastAt[u] = nowTs;
         _userLastEpoch[u] = epoch;
     }
 

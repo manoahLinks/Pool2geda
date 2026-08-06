@@ -380,6 +380,42 @@ describe("ConfidentialPrizePool", function () {
     });
   });
 
+  describe("epoch overrun", function () {
+    it("credits deposits made after the timer elapsed to the NEXT epoch", async function () {
+      // `closeEpoch` is permissionless, so an epoch can sit expired-but-unclosed.
+      // Activity in that window must land in the next epoch, not retroactively
+      // in the one whose timer already ran out. Without clamping, the deposit
+      // pushed the accrual cursor past the boundary, closeEpoch's accrual
+      // no-opped, and the epoch settled with a zero total — which surfaced on
+      // Sepolia as awardDraw reverting NothingToDraw.
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+
+      // Let epoch 0 expire with nobody in the pool, then deposit during the
+      // overrun window.
+      await time.increaseTo((await ctx.pool.epochEndsAt()) + 600n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // Epoch 0 genuinely had no deposits, so it must refuse to draw.
+      await ctx.pool.closeEpoch();
+      const instance = await fhevm.createInstance();
+      const dec0 = (await instance.publicDecrypt([
+        await ctx.pool.pendingTotalHandle(0),
+        await ctx.pool.pendingRandomHandle(0),
+      ])) as { abiEncodedClearValues: string; decryptionProof: string };
+      await expect(
+        ctx.pool.awardDraw(0, dec0.abiEncodedClearValues, dec0.decryptionProof)
+      ).to.be.revertedWithCustomError(ctx.pool, "NothingToDraw");
+
+      // Epoch 1 holds the deposit and settles normally.
+      await runDraw(ctx, 1);
+      const draw1 = await ctx.pool.draws(1);
+      expect(draw1.totalCumulative).to.be.greaterThan(0n);
+      expect(draw1.awarded).to.equal(true);
+    });
+  });
+
   describe("weighted distribution", function () {
     it("win frequency tracks each depositor's share of the TWAB", async function () {
       // The core correctness claim. Alice holds 3x Bob's stake for the same

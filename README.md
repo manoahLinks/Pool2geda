@@ -210,9 +210,18 @@ Sepolia, chain `11155111`. `confidentialProtocolId()` returns `10001`, confirmin
 |---|---|
 | `TestUSD` (tUSD) | [`0x77C017994264dBd3e190ae9bc3D7c96De8a52728`](https://sepolia.etherscan.io/address/0x77C017994264dBd3e190ae9bc3D7c96De8a52728) |
 | `ConfidentialUSD` (cUSD) | [`0x4DeD3F2430D48ee0Bd8535422E1FCF7Ea6cCbF81`](https://sepolia.etherscan.io/address/0x4DeD3F2430D48ee0Bd8535422E1FCF7Ea6cCbF81) |
-| `ConfidentialPrizePool` | [`0x621ae6DF57c888f702936FE184AE2ebB93854445`](https://sepolia.etherscan.io/address/0x621ae6DF57c888f702936FE184AE2ebB93854445) |
+| `ConfidentialPrizePool` | [`0x2ceFF963Ee0aE490b4D8a8EFaC0264A1c649c00f`](https://sepolia.etherscan.io/address/0x2ceFF963Ee0aE490b4D8a8EFaC0264A1c649c00f) |
+| `StreamingYieldSource` | [`0xAc661Fc25E4d47a2FF7c9977717c730CD26a809b`](https://sepolia.etherscan.io/address/0xAc661Fc25E4d47a2FF7c9977717c730CD26a809b) |
 
-Round length **900s (15 min)**, prize **10 cUSD**.
+Round length **900s (15 min)**. The prize is whatever the source has accrued
+when the round closes, capped at `prizePerDraw` — **10 cUSD**. At the deployed
+rate of 11,000 units/second a full round accrues ≈9.9 cUSD, so the figure moves
+between rounds rather than sitting at a constant.
+
+The tokens are carried over from the previous deployment; the pool and its yield
+source are new. The
+[earlier pool](https://sepolia.etherscan.io/address/0x621ae6DF57c888f702936FE184AE2ebB93854445)
+remains on-chain and holds no depositor funds.
 
 ### Getting test tokens
 

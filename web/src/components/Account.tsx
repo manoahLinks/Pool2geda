@@ -35,7 +35,7 @@ export function Account({
   const encrypt = useEncrypt();
   const { getSdk } = useZamaSdk();
   const pool = usePool();
-  const { members } = usePoolMembers(refreshKey);
+  const { members, error: rosterError } = usePoolMembers(refreshKey);
 
   const [amount, setAmount] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -62,9 +62,17 @@ export function Account({
   const shares = useSecret(sharesHandle as Hex | undefined, c.prizePool);
   const winnings = useSecret(winningsHandle as Hex | undefined, c.prizePool);
 
-  const empty =
-    members !== null &&
-    !members.some((m) => m.address.toLowerCase() === address?.toLowerCase());
+  // Derived from the caller's own share ciphertext, never from the roster.
+  //
+  // The roster is reconstructed from logs and can legitimately be unavailable —
+  // a rate-limited or range-capped RPC returns nothing. Deriving "have I
+  // deposited?" from it meant an unreadable register presented to every single
+  // user as "you have never deposited", hiding their balance behind a
+  // first-run prompt they could not get past.
+  //
+  // A zero handle means the pool has never written a share for this address,
+  // which is exactly the question being asked, and it costs no extra call.
+  const empty = isZeroHandle(sharesHandle as Hex | undefined);
 
   // ── money ────────────────────────────────────────────────────────────────
 
@@ -317,7 +325,7 @@ export function Account({
         </Plate>
       )}
 
-      <Holders members={members} mine={shares} />
+      <Holders members={members} error={rosterError} mine={shares} />
     </div>
   );
 }

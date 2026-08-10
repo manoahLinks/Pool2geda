@@ -38,7 +38,7 @@ const SEALED = [
 
 export function Arrival({ onConnect }: { onConnect: () => void }) {
   const { prize, remaining, epoch } = usePool();
-  const { members } = usePoolMembers(0);
+  const { members, error: rosterError } = usePoolMembers(0);
   const shown = members?.slice(0, 6) ?? [];
 
   return (
@@ -91,7 +91,17 @@ export function Arrival({ onConnect }: { onConnect: () => void }) {
           fetchable by anyone, and legible to nobody but its owner.
         </p>
         <Plate className="px-7 py-2">
-          {shown.length === 0 ? (
+          {rosterError ? (
+            /* Never claim the pool is empty when the register simply could not
+               be read — this section's whole job is to be evidence. */
+            <div className="py-12 text-center text-[15px] text-slate">
+              The register could not be read from this network right now.
+            </div>
+          ) : members === null ? (
+            <div className="py-12 text-center text-[15px] text-slate">
+              Reading the register…
+            </div>
+          ) : shown.length === 0 ? (
             <div className="py-12 text-center text-[15px] text-slate">
               Nobody has deposited yet. The first will appear here — as an
               address, and nothing more.

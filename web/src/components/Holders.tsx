@@ -14,9 +14,12 @@ import { shortAddress } from "@/lib/format";
 /// in the only form anyone but their owner can ever have them.
 export function Holders({
   members,
+  error,
   mine,
 }: {
+  /// `null` means not known yet — never "nobody".
   members: Member[] | null;
+  error?: string | null;
   mine: Secret;
 }) {
   const { address } = useAccount();
@@ -33,7 +36,15 @@ export function Holders({
       </p>
 
       <Plate className="px-9 py-2">
-        {members === null ? (
+        {error ? (
+          /* Say the register could not be read. Showing an empty list here
+             would be a lie about the pool, not a gap in the UI. */
+          <div className="mx-auto max-w-[46ch] py-14 text-center text-[15px] text-slate">
+            The register could not be read. Your own holding above is unaffected —
+            it comes straight from the contract.
+            <span className="data mt-3 block text-slate">{error}</span>
+          </div>
+        ) : members === null ? (
           <div className="py-14 text-center text-[15px] text-slate">
             Reading the register…
           </div>

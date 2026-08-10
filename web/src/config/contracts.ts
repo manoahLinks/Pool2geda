@@ -32,6 +32,25 @@ export const missingContractEnv: string[] = (
 export const contracts: Contracts | null =
   missingContractEnv.length === 0 ? (RAW as unknown as Contracts) : null;
 
+/// Block the pool was deployed in.
+///
+/// Load-bearing, not an optimisation. Scanning `Deposited` logs from block 0 is
+/// rejected outright by every Sepolia RPC — the default provider caps
+/// `eth_getLogs` at 1,000 blocks and others at 50,000 — so without this the
+/// roster silently comes back empty on a chain with thousands of blocks of
+/// history. The deploy script writes it alongside the addresses.
+///
+/// Falls back to 0 rather than throwing; the scanner treats that as "unknown"
+/// and reports the failure instead of pretending the pool is empty.
+export const DEPLOY_BLOCK: bigint = (() => {
+  const raw = import.meta.env.VITE_DEPLOY_BLOCK;
+  try {
+    return raw ? BigInt(raw) : 0n;
+  } catch {
+    return 0n;
+  }
+})();
+
 /// cUSD and tUSD both use 6 decimals (the ERC-7984 wrapper caps at 6).
 export const DECIMALS = 6;
 

@@ -416,6 +416,118 @@ describe("ConfidentialPrizePool", function () {
     });
   });
 
+  describe("yield source", function () {
+    /// Deploy a source, fund it, and hand it to the pool.
+    async function withSource(
+      ctx: Awaited<ReturnType<typeof deployFixture>>,
+      kind: "admin" | "streaming",
+      funding: bigint
+    ) {
+      const { cusdAddr, poolAddr, deployer, pool, cusd } = ctx;
+      const src =
+        kind === "admin"
+          ? await (
+              await ethers.getContractFactory("AdminFundedYieldSource")
+            ).deploy(cusdAddr, poolAddr, PRIZE, deployer.address)
+          : await (
+              await ethers.getContractFactory("StreamingYieldSource")
+            ).deploy(cusdAddr, poolAddr, 1_000n, PRIZE * 10n, deployer.address);
+
+      const srcAddr = await src.getAddress();
+      await fund(ctx, deployer, funding);
+      await cusd.connect(deployer).setOperator(srcAddr, FAR_FUTURE);
+      const e = await encrypted(srcAddr, deployer, funding);
+      await src.connect(deployer).fund(e.handle, e.proof);
+      await pool.connect(deployer).setYieldSource(srcAddr);
+      return { src, srcAddr };
+    }
+
+    it("fills the reserve on close, so a winner is paid from harvested yield", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // The reserve is never funded directly — everything the winner receives
+      // must arrive through the interface.
+      await withSource(ctx, "admin", 100_000_000n);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(PRIZE);
+    });
+
+    it("a streaming source pays more after a longer round", async function () {
+      const ctx = await deployFixture();
+      const { src } = await withSource(ctx, "streaming", 500_000_000n);
+
+      const short = await src.accrued();
+      await time.increase(600);
+      const longer = await src.accrued();
+
+      expect(longer).to.be.greaterThan(short);
+      // And it is bounded, so a long silence cannot drain the stream into one
+      // round.
+      await time.increase(EPOCH * 100);
+      expect(await src.accrued()).to.equal(PRIZE * 10n);
+    });
+
+    it("credits the reserve by what moved, not by what was requested", async function () {
+      // The source is funded with less than one round's prize. ERC-7984
+      // saturates, so the transfer succeeds having moved only what was there —
+      // crediting the request would invent reserve against tokens that never
+      // arrived, and eventually pay a prize out of principal.
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      const short = PRIZE / 4n;
+      await withSource(ctx, "admin", short);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      // Reserve holds a quarter prize, so the solvency gate declines to credit
+      // a win it cannot pay rather than overdrawing.
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(0n);
+
+      // Principal is untouched throughout.
+      const e = await encrypted(ctx.poolAddr, alice, 50_000_000n);
+      await ctx.pool.connect(alice).withdraw(e.handle, e.proof);
+      expect(
+        await decryptFor(await ctx.cusd.confidentialBalanceOf(alice.address), ctx.cusdAddr, alice)
+      ).to.equal(100_000_000n);
+    });
+
+    it("is optional — an unset source leaves the pool working as before", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+      await expect(runDraw(ctx, 0)).to.not.be.reverted;
+    });
+
+    it("refuses harvest from anyone but the pool", async function () {
+      const ctx = await deployFixture();
+      const { src } = await withSource(ctx, "admin", 100_000_000n);
+      await expect(
+        src.connect(ctx.signers[1]).harvest(ctx.signers[1].address, PRIZE)
+      ).to.be.revertedWithCustomError(src, "OnlyPool");
+    });
+  });
+
   describe("participant registry", function () {
     it("records each depositor exactly once, however often they deposit", async function () {
       const ctx = await deployFixture();

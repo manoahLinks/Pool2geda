@@ -5,6 +5,7 @@ import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2St
 import { FHE, euint64, ebool, externalEuint64 } from "@fhevm/solidity/lib/FHE.sol";
 import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import { IERC7984 } from "@openzeppelin/confidential-contracts/interfaces/IERC7984.sol";
+import { IConfidentialYieldSource } from "./IConfidentialYieldSource.sol";
 import { UniformRandomNumber } from "./vendor/UniformRandomNumber.sol";
 
 /// @title ConfidentialPrizePool
@@ -111,6 +112,15 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     /// Public prize amount used for the next draw.
     uint64 public prizePerDraw;
 
+    /// Where the prize comes from. Optional: unset, the reserve is filled by
+    /// `fundPrize` alone. Set, every close pulls whatever has accrued.
+    ///
+    /// Deliberately swappable, because the shipped sources are stand-ins. The
+    /// pool never learns what is behind this interface, so replacing a
+    /// simulated source with a real one changes nothing here — not the draw,
+    /// not the accounting, not the confidentiality model.
+    IConfidentialYieldSource public yieldSource;
+
     // --- Participant registry -------------------------------------------------
     //
     // Purely for presentation. Winner selection is a per-user predicate and
@@ -145,6 +155,10 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
     event Claimed(address indexed user);
     event PrizeFunded(address indexed from);
     event PrizePerDrawSet(uint64 amount);
+    event YieldSourceSet(address indexed source);
+    /// `requested` is the plaintext figure asked for. What actually landed is a
+    /// ciphertext and stays one.
+    event YieldHarvested(address indexed source, uint64 requested);
 
     /// Emitted when an epoch closes. The two handles must be publicly decrypted
     /// off-chain and submitted to `awardDraw` **in this order** — the
@@ -450,6 +464,36 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         emit PrizePerDrawSet(amount);
     }
 
+    function setYieldSource(IConfidentialYieldSource source) external onlyOwner {
+        yieldSource = source;
+        emit YieldSourceSet(address(source));
+    }
+
+    /// @dev Pull whatever the source has accrued into the reserve.
+    ///
+    /// Runs once per round, inside `closeEpoch`. Everything about it is
+    /// defensive, because a prize source must never be able to harm principal:
+    /// an unset source is a no-op, a source reporting zero is a no-op, and the
+    /// reserve grows by the amount that ACTUALLY moved rather than the amount
+    /// requested — ERC-7984 transfers saturate, so a source that is short moves
+    /// less and the call still succeeds.
+    ///
+    /// Note what is absent: no path here touches `_shares` or `_totalShares`.
+    /// A yield source that fails, stalls, or lies cannot reach a depositor's
+    /// stake, which is what makes "no loss" structural.
+    function _harvest() private {
+        if (address(yieldSource) == address(0)) return;
+
+        uint64 amount = yieldSource.accrued();
+        if (amount == 0) return;
+
+        euint64 moved = yieldSource.harvest(address(this), amount);
+        _reserve = FHE.add(_reserve, moved);
+        FHE.allowThis(_reserve);
+
+        emit YieldHarvested(address(yieldSource), amount);
+    }
+
     // ---------------------------------------------------------------------
     // Draw lifecycle
     // ---------------------------------------------------------------------
@@ -494,6 +538,10 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         if (block.timestamp < closesAt) revert EpochNotOver(closesAt);
 
         uint256 closing = epoch;
+
+        // Top the reserve up before the round settles, so a prize won here is
+        // backed by yield this round produced.
+        _harvest();
 
         // Whole further periods elapsed since this epoch should have closed.
         // Zero on a punctual close.

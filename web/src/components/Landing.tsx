@@ -23,7 +23,7 @@ const FEATURES = [
 ];
 
 export function Landing({ onConnect }: { onConnect: () => void }) {
-  const { prize, remaining, epoch } = usePool();
+  const { prize, prizeCeiling, remaining, epoch } = usePool();
   const { members, error } = usePoolMembers(0);
   const preview = members?.slice(0, 5) ?? [];
 
@@ -62,6 +62,13 @@ export function Landing({ onConnect }: { onConnect: () => void }) {
             {prize !== undefined ? formatMoney(prize) : "—"}
             <span className="ml-2 text-[15px] font-bold">cUSD</span>
           </div>
+          {/* The prize accrues with the clock, so it is smaller early in a
+              round. Showing the ceiling alone would overstate every round. */}
+          {prizeCeiling !== undefined && (
+            <div className="mt-1.5 text-[13px] text-muted">
+              Growing · up to {formatMoney(prizeCeiling)}
+            </div>
+          )}
         </Card>
         <Card className="px-6 py-5">
           <div className="label">Next draw</div>

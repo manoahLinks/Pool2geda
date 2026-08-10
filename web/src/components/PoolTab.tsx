@@ -11,7 +11,7 @@ import { usePoolMembers } from "@/hooks/usePoolMembers";
 import { contracts } from "@/config/contracts";
 import { prizePoolAbi } from "@/abi/prizePool";
 import { publicDecryptWithRetry } from "@/lib/decrypt";
-import { formatDuration, shortAddress } from "@/lib/format";
+import { formatDuration, formatMoney, shortAddress } from "@/lib/format";
 import { useShell } from "@/lib/shell";
 
 const poolAbi = prizePoolAbi as unknown as Abi;
@@ -134,6 +134,19 @@ export function PoolTab({
             <p className="m-0 mt-3 max-w-[54ch] text-[14px] leading-relaxed text-muted">
               {r.body}
             </p>
+            {/* What this round actually pays. Accrues with the clock, so it is
+                smaller early on — the ceiling sits beside it for context. */}
+            <div className="mt-5 flex items-baseline gap-2.5">
+              <span className="label">Prize</span>
+              <span className="num text-[20px] font-extrabold text-mint">
+                {pool.prize !== undefined ? formatMoney(pool.prize) : "—"} cUSD
+              </span>
+              {pool.prizeCeiling !== undefined && (
+                <span className="text-[13px] text-muted">
+                  of {formatMoney(pool.prizeCeiling)} max
+                </span>
+              )}
+            </div>
           </div>
           <div className="flex shrink-0 items-center gap-5">
             <Rosette

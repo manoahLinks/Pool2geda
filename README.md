@@ -48,6 +48,15 @@ Every balance is a `euint64` ciphertext handle. The pool stores:
 
 ### Odds are stake × time, not stake
 
+> **A deliberate departure from the brief, stated up front.** The brief asks for
+> winner selection "weighted by deposit size". This weights by deposit size
+> **multiplied by holding time**, which is what PoolTogether v5 itself does.
+> Size alone is trivially gameable: borrow a large sum, deposit it one block
+> before the draw, win with near-certainty, repay. Weighting by size alone would
+> reproduce the mechanic while removing the property that makes it safe. Every
+> other guarantee the brief asks for is met exactly; this one is met by the
+> design the brief is asking us to recreate.
+
 Odds follow a **time-weighted average balance** (TWAB), ported from PoolTogether's `TwabLib`:
 
 ```
@@ -219,7 +228,7 @@ Requires Node 20 or 22.
 # Contracts
 cd contracts
 npm install
-npx hardhat test                    # 15 tests, real FHE pipeline — never mocked
+npx hardhat test                    # 15 tests on the FHEVM mock coprocessor
 
 # Deploy (writes web/.env automatically)
 npx hardhat vars set PRIVATE_KEY
@@ -258,7 +267,27 @@ Every published `@openzeppelin/confidential-contracts` release through 0.5.1 dec
 
 ## Verification
 
-### Tests — 15 passing, against the real FHE pipeline
+Verification comes in two layers, and it is worth being exact about which is
+which, because they prove different things.
+
+**Layer 1 — 15 tests on the FHEVM mock.** `npx hardhat test`. The suite runs
+against `@fhevm/hardhat-plugin`'s local mock coprocessor and is gated on it
+(`if (!fhevm.isMock) this.skip()`), so it never touches the relayer or the KMS.
+What it proves is the *logic*: TWAB accounting, the winner predicate, no-loss
+invariants, saturation handling, epoch boundaries. What it cannot prove is that
+the real FHE pipeline agrees.
+
+**Layer 2 — a live end-to-end spike on Sepolia.** `scripts/spike-relayer.ts`
+exercises what the mock skips, against the deployed contracts and the real
+relayer: `encrypt()` + ZK proof into `FHE.fromExternal`, `userDecrypt()` through
+the EIP-712 permit, `publicDecrypt()` of both draw handles, and `awardDraw`
+verifying them on-chain via `FHE.checkSignatures` — ending in a real prize
+credit. Latencies and gas are tabulated below.
+
+Neither layer alone is sufficient. Together they cover the logic and the
+cryptography.
+
+### Layer 1 — 15 tests on the FHEVM mock
 
 `npx hardhat test`. Notable cases:
 
@@ -273,9 +302,11 @@ Every published `@openzeppelin/confidential-contracts` release through 0.5.1 dec
 | Epoch overrun | Deposits during an expired-but-unclosed round land in the next one |
 | Draw immutability | A second `awardDraw` reverts |
 
-### Live on Sepolia
+### Layer 2 — live on Sepolia, against the real relayer
 
-The full cycle — deposit → draw → win → credit — verified end to end against the live relayer via `scripts/spike-relayer.ts`:
+The full cycle — deposit → draw → win → credit — verified end to end via
+`scripts/spike-relayer.ts`. This is the layer the mock cannot reach: real
+ciphertexts, real ZK proofs, real KMS signatures verified on-chain.
 
 | Step | Latency | Gas |
 |---|---|---|

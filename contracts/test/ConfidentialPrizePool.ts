@@ -416,6 +416,100 @@ describe("ConfidentialPrizePool", function () {
     });
   });
 
+  describe("participant registry", function () {
+    it("records each depositor exactly once, however often they deposit", async function () {
+      const ctx = await deployFixture();
+      const [, alice, bob] = ctx.signers;
+
+      expect(await ctx.pool.participantCount()).to.equal(0n);
+
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 10_000_000n);
+      await deposit(ctx, alice, 10_000_000n); // same depositor again
+      await fund(ctx, bob, 100_000_000n);
+      await deposit(ctx, bob, 10_000_000n);
+
+      expect(await ctx.pool.participantCount()).to.equal(2n);
+      expect(await ctx.pool.participants()).to.deep.equal([alice.address, bob.address]);
+      expect(await ctx.pool.isParticipant(alice.address)).to.equal(true);
+      expect(await ctx.pool.isParticipant(ctx.signers[3].address)).to.equal(false);
+    });
+  });
+
+  describe("dead time", function () {
+    it("crosses a long gap in one call and mints no unclaimable draw", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // Nobody closes for ten epochs.
+      await time.increaseTo((await ctx.pool.epochEndsAt()) + BigInt(EPOCH * 10));
+      await expect(ctx.pool.closeEpoch()).to.emit(ctx.pool, "DeadEpochsSkipped");
+
+      // One call crossed the whole gap rather than advancing a single period.
+      expect(await ctx.pool.epoch()).to.equal(11n);
+      // And the pool is live again: the new epoch has not already expired.
+      expect(await ctx.pool.epochEndsAt()).to.be.greaterThan(
+        BigInt((await ethers.provider.getBlock("latest"))!.timestamp)
+      );
+      // No draw was created for the skipped round — a prize nobody could claim
+      // is worse than no prize.
+      expect(await ctx.pool.pendingTotalHandle(0)).to.equal(ethers.ZeroHash);
+    });
+
+    it("does not hand an idle depositor a guaranteed win after dead time", async function () {
+      // THE invariant. Fast-forwarding the clock without advancing the epoch
+      // counter by the same number of periods inflates `_cumPrev` to the whole
+      // gap while `_totalCumPrev` still holds one epoch — after which
+      // uniform(prn, total) can never exceed it and the idle user wins every
+      // draw with certainty. Assert the accumulators still account for the
+      // public total and nothing more.
+      const ctx = await deployFixture();
+      const [, alice, bob] = ctx.signers;
+
+      await fund(ctx, alice, 20_000_000n);
+      await deposit(ctx, alice, 20_000_000n);
+      await fund(ctx, bob, 20_000_000n);
+      await deposit(ctx, bob, 20_000_000n);
+
+      // Long silence, then a catch-up close that skips the dead rounds.
+      await time.increaseTo((await ctx.pool.epochEndsAt()) + BigInt(EPOCH * 20));
+      await ctx.pool.closeEpoch();
+
+      // Now a real round runs to completion.
+      const live = await ctx.pool.epoch();
+      await runDraw(ctx, Number(live));
+
+      await ctx.pool.connect(alice).checkPrize(live);
+      await ctx.pool.connect(bob).checkPrize(live);
+
+      const total = (await ctx.pool.draws(live)).totalCumulative;
+      const a = await decryptFor(
+        await ctx.pool.cumulativePrevOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      const b = await decryptFor(
+        await ctx.pool.cumulativePrevOf(bob.address),
+        ctx.poolAddr,
+        bob
+      );
+
+      console.log(
+        `      after 20 dead epochs: alice=${a} bob=${b} total=${total} ` +
+          `(sum/total = ${Number(((a + b) * 10000n) / total) / 100}%)`
+      );
+
+      // Neither may exceed the modulus — that is precisely the rigged-draw bug.
+      expect(a).to.be.lessThanOrEqual(total);
+      expect(b).to.be.lessThanOrEqual(total);
+      // And together they still account for the whole public total, so odds
+      // sum to one rather than to twenty.
+      expect(Number(((a + b) * 10000n) / total) / 100).to.be.closeTo(100, 1);
+    });
+  });
+
   describe("weighted distribution", function () {
     it("win frequency tracks each depositor's share of the TWAB", async function () {
       // The core correctness claim. Alice holds 3x Bob's stake for the same

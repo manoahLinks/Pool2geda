@@ -29,7 +29,7 @@ export function PoolTab({
   onOpenResult,
 }: {
   refreshKey: number;
-  onChanged: () => void;
+  onChanged: () => void | Promise<void>;
   shares: Secret;
   onOpenResult: () => void;
 }) {

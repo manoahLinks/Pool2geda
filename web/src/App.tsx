@@ -31,7 +31,13 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("pool");
   const [nonce, setNonce] = useState(0);
   const [action, setAction] = useState<Action | null>(null);
-  const bump = () => setNonce((n) => n + 1);
+  /// Anything that changed on-chain state: re-read the ciphertext handles and
+  /// nudge the panels. Awaited so a caller can decrypt straight afterwards and
+  /// be sure it is reading the value it just created.
+  const bump = async () => {
+    setNonce((n) => n + 1);
+    await Promise.all([refetchShares(), refetchWinnings(), setup.refetchAll()]);
+  };
 
   const wrongNetwork = isConnected && chainId !== sepolia.id;
   const c = contracts;
@@ -39,19 +45,30 @@ export default function App() {
   // Hoisted so the register row and the account panel share one decrypted
   // value — unsealing in either place reveals both, which is what a user
   // expects from the same number shown twice.
-  const { data: sharesHandle } = useReadContract({
+  // These handles CHANGE on every write that touches them — a deposit, a
+  // withdrawal, a prize check. Reading them once is the bug that made a real
+  // win look like a loss: `checkPrize` credits the prize and rewrites
+  // `_winnings`, but the page still held the pre-check handle, which is the
+  // zero handle for a first-time winner. `useSecret` short-circuits a zero
+  // handle straight to 0 without calling the relayer, so "reveal result"
+  // reported "not this round" instantly and confidently, while 5 cUSD sat in
+  // the contract.
+  //
+  // Refetched on every state change via `bump`, plus a slow poll so a round
+  // settled by somebody else still lands.
+  const { data: sharesHandle, refetch: refetchShares } = useReadContract({
     address: c?.prizePool,
     abi: poolAbi,
     functionName: "sharesOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!c && !!address },
+    query: { enabled: !!c && !!address, refetchInterval: 15_000 },
   });
-  const { data: winningsHandle } = useReadContract({
+  const { data: winningsHandle, refetch: refetchWinnings } = useReadContract({
     address: c?.prizePool,
     abi: poolAbi,
     functionName: "winningsOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!c && !!address },
+    query: { enabled: !!c && !!address, refetchInterval: 15_000 },
   });
 
   const shares = useSecret(sharesHandle as Hex | undefined, c?.prizePool ?? "0x");
@@ -61,7 +78,10 @@ export default function App() {
   /// Decrypt winnings and say what it means. A positive figure after a check is
   /// a win; zero is not.
   async function revealResult() {
-    const v = await winnings.reveal();
+    // Re-read first. The handle written by `checkPrize` is only a few seconds
+    // old and the page may still be holding the one from before it.
+    const { data: fresh } = await refetchWinnings();
+    const v = await winnings.reveal(fresh as Hex | undefined);
     if (v === null) return;
     showResult({ won: v > 0n, amount: v, round: "" });
   }

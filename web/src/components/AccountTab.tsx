@@ -31,7 +31,7 @@ export function AccountTab({
   winnings: Secret;
   sharesHandle?: Hex;
   winningsHandle?: Hex;
-  onChanged: () => void;
+  onChanged: () => void | Promise<void>;
   onOpen: (a: Action) => void;
   /// The wallet's own confidential balance — what a deposit is drawn from.
   walletBalance: Secret;

@@ -24,7 +24,7 @@ export function GetStarted({
   onDone,
 }: {
   setup: ReturnType<typeof useSetup>;
-  onDone: () => void;
+  onDone: () => void | Promise<void>;
 }) {
   const c = contracts!;
   const { run } = useShell();

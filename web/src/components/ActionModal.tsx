@@ -27,7 +27,7 @@ export function ActionModal({
   action: Action;
   onAction: (a: Action) => void;
   onClose: () => void;
-  onDone: () => void;
+  onDone: () => void | Promise<void>;
   knownStake: bigint | null;
 }) {
   const c = contracts!;

@@ -82,8 +82,7 @@ async function main() {
 
   // --- fund, and verify it actually moved -------------------------------
   const before = await myCusd();
-  const enc = await fhevm.createEncryptedInput(srcD.address, me).add64(amount).encrypt();
-  await (await src.fund(enc.handles[0], enc.inputProof)).wait();
+  await (await src.fund(amount)).wait();
   const after = await myCusd();
   const moved = before - after;
 
@@ -101,7 +100,8 @@ async function main() {
     `\nStreaming at ${rate} units/sec, capped at ${max} per harvest.` +
       `\nA 15-minute round accrues ~${(900n * rate) / 10n ** DECIMALS} cUSD.`
   );
-  console.log(`Currently accrued: ${await src.accrued()}`);
+  console.log(`Available in source: ${await src.available()}`);
+  console.log(`Currently accrued:   ${await src.accrued()}`);
 }
 
 main().catch((e) => {

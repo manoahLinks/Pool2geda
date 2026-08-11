@@ -9,16 +9,23 @@ import { resolve, dirname } from "node:path";
 /// epoch: a prize won in epoch N must be checked during epoch N+1.
 const EPOCH_DURATION = 15 * 60; // 15 minutes
 
-/// Public prize per draw: 10 cUSD (6 decimals). Acts as the ceiling a single
-/// round can pay; the streaming source decides how much of it actually accrued.
-const PRIZE_PER_DRAW = 10_000_000n;
+/// Public prize ceiling per draw: 5 cUSD (6 decimals).
+///
+/// Deliberately well BELOW what a full round accrues (~9.9 cUSD). The reserve
+/// must comfortably cover the ceiling or `checkPrize` pays out less than
+/// advertised — and an earlier version of these constants had a 9.9/round
+/// stream chasing a 10 ceiling, which could never be solvent even on a perfect
+/// round. Headroom is not a luxury here; it is the difference between a prize
+/// and a rounding error.
+const PRIZE_PER_DRAW = 5_000_000n;
 
 /// Simulated yield, released against the clock.
 ///
-/// Sized so a full 15-minute round accrues roughly the whole prize
-/// (900s x 11_000 = 9.9 cUSD), which makes the figure move between rounds the
-/// way real prize savings do without claiming a source of return that does not
-/// exist on a test network. See StreamingYieldSource for the full disclaimer.
+/// A full 15-minute round accrues 900s x 11,000 = 9.9 cUSD, roughly double the
+/// prize ceiling, so the reserve builds a buffer instead of running to empty.
+/// The figure still moves between rounds the way real prize savings do, without
+/// claiming a source of return that does not exist on a test network. See
+/// StreamingYieldSource for the full disclaimer.
 const YIELD_PER_SECOND = 11_000n;
 const MAX_PER_HARVEST = 20_000_000n; // 20 cUSD — one long silence cannot drain it
 

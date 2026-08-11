@@ -444,8 +444,7 @@ describe("ConfidentialPrizePool", function () {
       const srcAddr = await src.getAddress();
       await fund(ctx, deployer, funding);
       await cusd.connect(deployer).setOperator(srcAddr, FAR_FUTURE);
-      const e = await encrypted(srcAddr, deployer, funding);
-      await src.connect(deployer).fund(e.handle, e.proof);
+      await src.connect(deployer).fund(funding);
       await pool.connect(deployer).setYieldSource(srcAddr);
       return { src, srcAddr };
     }
@@ -486,6 +485,35 @@ describe("ConfidentialPrizePool", function () {
       expect(await src.accrued()).to.equal(PRIZE * 10n);
     });
 
+    it("pays a winner what the reserve holds when it is short of the ceiling", async function () {
+      // THE regression. The old gate was all-or-nothing — ge(reserve, prize) —
+      // so a reserve one cent below the ceiling credited every winner ZERO.
+      // Invisible by construction: a loss and an unpayable win are the same
+      // observation, so the pool simply looked like nobody ever won. A
+      // streaming source makes this the normal case, not an edge one.
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // Reserve deliberately just under the advertised prize.
+      const short = PRIZE - 1n;
+      await withSource(ctx, "admin", short);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      // Sole depositor holds the whole TWAB, so she wins. She must receive the
+      // reserve rather than nothing.
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(short);
+      expect(won).to.be.greaterThan(0n);
+    });
+
     it("credits the reserve by what moved, not by what was requested", async function () {
       // The source is funded with less than one round's prize. ERC-7984
       // saturates, so the transfer succeeds having moved only what was there —
@@ -502,14 +530,14 @@ describe("ConfidentialPrizePool", function () {
       await runDraw(ctx, 0);
       await ctx.pool.connect(alice).checkPrize(0);
 
-      // Reserve holds a quarter prize, so the solvency gate declines to credit
-      // a win it cannot pay rather than overdrawing.
+      // A quarter of the prize was funded, so a quarter of the prize is paid —
+      // bounded by the reserve, never overdrawing it.
       const won = await decryptFor(
         await ctx.pool.winningsOf(alice.address),
         ctx.poolAddr,
         alice
       );
-      expect(won).to.equal(0n);
+      expect(won).to.equal(short);
 
       // Principal is untouched throughout.
       const e = await encrypted(ctx.poolAddr, alice, 50_000_000n);

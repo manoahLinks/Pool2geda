@@ -376,8 +376,9 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         _accrueTotal(uint48(block.timestamp));
         _accrueUser(msg.sender);
 
-        // ERC7984 `_update` SATURATES rather than reverting: if the caller is
-        // short, it moves zero. Always credit the amount actually moved.
+        // ERC7984 `_update` is ALL-OR-NOTHING and does not revert: if the
+        // caller is short it moves ZERO, not a partial amount, and the call
+        // still succeeds. Always credit the amount actually moved.
         euint64 moved = token.confidentialTransferFrom(msg.sender, address(this), requested);
 
         _shares[msg.sender] = FHE.add(_shares[msg.sender], moved);
@@ -636,13 +637,30 @@ contract ConfidentialPrizePool is ZamaEthereumConfig, Ownable2Step {
         // Scalar compare against the encrypted TWAB: P(win) = userTwab / totalTwab.
         ebool won = FHE.gt(_cumPrev[msg.sender], uint64(prn));
 
-        // Gate on reserve solvency so the reserve can never underflow, and a
-        // "win" is never credited that the pool cannot pay.
-        euint64 prizeEnc = FHE.asEuint64(d.prize);
-        ebool payable_ = FHE.ge(_reserve, prizeEnc);
-        ebool awarded = FHE.and(won, payable_);
-
-        euint64 award = FHE.select(awarded, prizeEnc, FHE.asEuint64(0));
+        // Pay what the reserve can actually afford, up to the advertised prize.
+        //
+        // This used to be an all-or-nothing solvency gate —
+        // `and(won, ge(reserve, prize))` — which had a failure mode that is
+        // invisible by construction: a reserve one cent short of the prize
+        // credited every winner ZERO, and because winning and losing are
+        // deliberately indistinguishable, the pool presented as "nobody won"
+        // with nothing reverted and nothing logged. A streaming yield source
+        // makes that the normal case rather than an edge one, since the reserve
+        // tracks accrual and the prize was a fixed ceiling.
+        //
+        // `min` is strictly better: the payout can never exceed the reserve, so
+        // it still cannot underflow, and a winner receives what is there rather
+        // than nothing. It is also cheaper — one comparison instead of two.
+        //
+        // Consequence worth stating: the exact payout is now a ciphertext, so
+        // `prizePerDraw` is a public CEILING rather than a public promise. With
+        // several winners in one round the earlier checker may take more of the
+        // reserve than the later one.
+        euint64 award = FHE.select(
+            won,
+            FHE.min(_reserve, FHE.asEuint64(d.prize)),
+            FHE.asEuint64(0)
+        );
 
         _winnings[msg.sender] = FHE.add(_winnings[msg.sender], award);
         _reserve = FHE.sub(_reserve, award);

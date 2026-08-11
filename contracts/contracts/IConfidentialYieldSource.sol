@@ -39,10 +39,13 @@ interface IConfidentialYieldSource {
 
     /// @notice Move up to `amount` of the confidential token to `to`.
     /// @dev MUST return the amount that actually moved, not the amount asked
-    /// for. ERC-7984 transfers saturate rather than reverting, so a source that
-    /// is short moves less than requested and the transaction still succeeds —
-    /// crediting the request instead of the movement would inflate the reserve
-    /// against tokens that were never received.
+    /// for, and MUST NOT be callable for more than the source holds.
+    ///
+    /// ERC-7984 transfers are ALL-OR-NOTHING: `FHESafeMath.tryDecrease` returns
+    /// `ge(balance, amount)`, so a short source moves ZERO and the transaction
+    /// still succeeds. Crediting the request instead of the movement would
+    /// inflate the pool's reserve against tokens it never received; requesting
+    /// more than the source holds silently contributes nothing at all.
     ///
     /// Implementations MUST restrict this to the pool.
     function harvest(address to, uint64 amount) external returns (euint64 moved);

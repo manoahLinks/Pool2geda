@@ -2,7 +2,7 @@
 pragma solidity ^0.8.27;
 
 import { Ownable2Step, Ownable } from "@openzeppelin/contracts/access/Ownable2Step.sol";
-import { FHE, euint64, externalEuint64 } from "@fhevm/solidity/lib/FHE.sol";
+import { FHE, euint64 } from "@fhevm/solidity/lib/FHE.sol";
 import { ZamaEthereumConfig } from "@fhevm/solidity/config/ZamaConfig.sol";
 import { IERC7984 } from "@openzeppelin/confidential-contracts/interfaces/IERC7984.sol";
 import { IConfidentialYieldSource } from "../IConfidentialYieldSource.sol";
@@ -39,10 +39,26 @@ contract StreamingYieldSource is ZamaEthereumConfig, Ownable2Step, IConfidential
 
     uint48 public lastHarvestAt;
 
+    /// Plaintext record of what this source can actually pay.
+    ///
+    /// Load-bearing, not bookkeeping. ERC-7984 transfers are ALL-OR-NOTHING:
+    /// `FHESafeMath.tryDecrease` returns `ge(balance, amount)` and `_update`
+    /// then moves either the full amount or ZERO. Asking for one unit more than
+    /// this source holds therefore moves nothing at all, leaves the pool's
+    /// reserve empty, and — because a loss and an unpayable win are the same
+    /// observation — presents as "nobody won" with no error anywhere.
+    ///
+    /// So the pool is never allowed to over-request: `accrued()` is capped by
+    /// this figure. Keeping it in plaintext costs no privacy, because the prize
+    /// pot is public by design; only depositor balances are secret.
+    uint64 public available;
+
+
     event Funded(address indexed from);
     event RateSet(uint64 ratePerSecond, uint64 maxPerHarvest);
 
     error OnlyPool();
+    error InsufficientReserve(uint64 requested, uint64 available);
 
     constructor(
         IERC7984 token_,
@@ -59,10 +75,13 @@ contract StreamingYieldSource is ZamaEthereumConfig, Ownable2Step, IConfidential
     }
 
     /// @notice Top the stream up. Open to anyone.
-    function fund(externalEuint64 encAmount, bytes calldata inputProof) external {
-        euint64 amount = FHE.fromExternal(encAmount, inputProof);
-        FHE.allowTransient(amount, address(token));
-        token.confidentialTransferFrom(msg.sender, address(this), amount);
+    /// @dev Plaintext amount — see `available` and AdminFundedYieldSource.fund.
+    function fund(uint64 amount) external {
+        euint64 enc = FHE.asEuint64(amount);
+        FHE.allowThis(enc);
+        FHE.allowTransient(enc, address(token));
+        token.confidentialTransferFrom(msg.sender, address(this), enc);
+        available += amount;
         emit Funded(msg.sender);
     }
 
@@ -74,14 +93,15 @@ contract StreamingYieldSource is ZamaEthereumConfig, Ownable2Step, IConfidential
 
     /// @inheritdoc IConfidentialYieldSource
     ///
-    /// @dev Not capped by the balance held — that balance is a ciphertext and
-    /// cannot be compared in plaintext. It does not need to be: the transfer
-    /// saturates, so an over-request simply moves whatever is left and
-    /// `harvest` reports the real figure.
+    /// @dev Capped twice: by `maxPerHarvest`, so one long silence cannot drain
+    /// the stream into a single round, and by `available`, so the pool can never
+    /// request more than is here. The second cap is the important one — an
+    /// over-request moves ZERO, not a partial amount.
     function accrued() external view returns (uint64) {
         uint256 elapsed = block.timestamp - lastHarvestAt;
         uint256 amount = elapsed * ratePerSecond;
-        return amount > maxPerHarvest ? maxPerHarvest : uint64(amount);
+        if (amount > maxPerHarvest) amount = maxPerHarvest;
+        return amount > available ? available : uint64(amount);
     }
 
     /// @inheritdoc IConfidentialYieldSource
@@ -91,6 +111,9 @@ contract StreamingYieldSource is ZamaEthereumConfig, Ownable2Step, IConfidential
         // Reset the clock even if the stream is dry, so a drained source does
         // not silently accumulate a claim it cannot honour.
         lastHarvestAt = uint48(block.timestamp);
+
+        if (amount > available) revert InsufficientReserve(amount, available);
+        available -= amount;
 
         euint64 request = FHE.asEuint64(amount);
         FHE.allowThis(request);

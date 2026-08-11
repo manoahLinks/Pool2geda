@@ -9,7 +9,11 @@ import { useShell } from "@/lib/shell";
 export type Secret = {
   value: bigint | null;
   busy: boolean;
-  reveal: () => Promise<bigint | null>;
+  /// `override` decrypts a handle the caller just re-read, rather than the one
+  /// this hook last rendered with. Needed straight after a write: React state
+  /// lags the chain by a render, and decrypting the stale handle silently
+  /// returns the previous value.
+  reveal: (override?: Hex) => Promise<bigint | null>;
   hide: () => void;
 };
 
@@ -41,11 +45,12 @@ export function useSecret(
     setValue(null);
   }, [handle, address]);
 
-  const reveal = useCallback(async (): Promise<bigint | null> => {
-    if (!handle) return null;
+  const reveal = useCallback(async (override?: Hex): Promise<bigint | null> => {
+    const target = override ?? handle;
+    if (!target) return null;
     // A handle that was never written decrypts to nothing — short-circuit
     // rather than sending the relayer a request it will reject.
-    if (isZeroHandle(handle)) {
+    if (isZeroHandle(target)) {
       setValue(0n);
       return 0n;
     }
@@ -60,7 +65,7 @@ export function useSecret(
     setBusy(true);
     try {
       const sdk = await getSdk();
-      const v = await userDecryptOne(sdk, handle, contractAddress);
+      const v = await userDecryptOne(sdk, target, contractAddress);
       setValue(v);
       return v;
     } catch (e) {

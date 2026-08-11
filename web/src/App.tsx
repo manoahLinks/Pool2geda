@@ -1,149 +1,277 @@
 import { useState } from "react";
 import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
-import { useAccount, useChainId } from "wagmi";
+import { useAccount, useChainId, useReadContract, useSwitchChain } from "wagmi";
+import type { Abi, Hex } from "viem";
 import { sepolia } from "@/config/wagmi";
 import { contracts, missingContractEnv } from "@/config/contracts";
-import { Arrival } from "@/components/Arrival";
-import { Setup } from "@/components/Setup";
-import { Account } from "@/components/Account";
+import { prizePoolAbi } from "@/abi/prizePool";
+import { Landing } from "@/components/Landing";
+import { PoolTab } from "@/components/PoolTab";
+import { AccountTab } from "@/components/AccountTab";
+import { ActionModal, type Action } from "@/components/ActionModal";
 import { BusyOverlay } from "@/components/BusyOverlay";
 import { ResultModal } from "@/components/ResultModal";
-import { NoticeBar } from "@/components/ui";
-import { useSetup, type SetupStep } from "@/hooks/useSetup";
+import { Badge, Button, NoticeBar } from "@/components/ui";
+import { useSetup } from "@/hooks/useSetup";
+import { useSecret } from "@/hooks/useSecret";
 import { useShell } from "@/lib/shell";
 import { shortAddress } from "@/lib/format";
+
+const poolAbi = prizePoolAbi as unknown as Abi;
+type Tab = "pool" | "account";
 
 export default function App() {
   const { isConnected, address } = useAccount();
   const chainId = useChainId();
-  const setup = useSetup();
+  const { switchChain } = useSwitchChain();
   const { openConnectModal } = useConnectModal();
-  const { busy, notice, result, dismissNotice, closeResult } = useShell();
+  const setup = useSetup();
+  const { busy, notice, result, dismissNotice, closeResult, showResult } = useShell();
 
+  const [tab, setTab] = useState<Tab>("pool");
   const [nonce, setNonce] = useState(0);
-  /// Set when a saver who is already set up asks to add more. Nothing else
-  /// overrides the flow — the rest is derived from what is on-chain, so the app
-  /// cannot show a step that has already been completed.
-  const [topUp, setTopUp] = useState(false);
+  const [action, setAction] = useState<Action | null>(null);
+  /// Anything that changed on-chain state: re-read the ciphertext handles and
+  /// nudge the panels. Awaited so a caller can decrypt straight afterwards and
+  /// be sure it is reading the value it just created.
+  const bump = async () => {
+    setNonce((n) => n + 1);
+    await Promise.all([refetchShares(), refetchWinnings(), setup.refetchAll()]);
+  };
 
   const wrongNetwork = isConnected && chainId !== sepolia.id;
-  const configured = !!contracts;
+  const c = contracts;
 
-  const screen: "arrival" | "setup" | "account" = !isConnected
-    ? "arrival"
-    : topUp || !setup.complete
-      ? "setup"
-      : "account";
+  // Hoisted so the register row and the account panel share one decrypted
+  // value — unsealing in either place reveals both, which is what a user
+  // expects from the same number shown twice.
+  // These handles CHANGE on every write that touches them — a deposit, a
+  // withdrawal, a prize check. Reading them once is the bug that made a real
+  // win look like a loss: `checkPrize` credits the prize and rewrites
+  // `_winnings`, but the page still held the pre-check handle, which is the
+  // zero handle for a first-time winner. `useSecret` short-circuits a zero
+  // handle straight to 0 without calling the relayer, so "reveal result"
+  // reported "not this round" instantly and confidently, while 5 cUSD sat in
+  // the contract.
+  //
+  // Refetched on every state change via `bump`, plus a slow poll so a round
+  // settled by somebody else still lands.
+  const { data: sharesHandle, refetch: refetchShares } = useReadContract({
+    address: c?.prizePool,
+    abi: poolAbi,
+    functionName: "sharesOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!c && !!address, refetchInterval: 15_000 },
+  });
+  const { data: winningsHandle, refetch: refetchWinnings } = useReadContract({
+    address: c?.prizePool,
+    abi: poolAbi,
+    functionName: "winningsOf",
+    args: address ? [address] : undefined,
+    query: { enabled: !!c && !!address, refetchInterval: 15_000 },
+  });
 
-  const step: SetupStep = topUp ? "deposit" : setup.autoStep;
+  const shares = useSecret(sharesHandle as Hex | undefined, c?.prizePool ?? "0x");
+  const walletBalance = useSecret(setup.balanceHandle, c?.confidentialUsd ?? "0x");
+  const winnings = useSecret(winningsHandle as Hex | undefined, c?.prizePool ?? "0x");
+
+  /// Decrypt winnings and say what it means. A positive figure after a check is
+  /// a win; zero is not.
+  async function revealResult() {
+    // Re-read first. The handle written by `checkPrize` is only a few seconds
+    // old and the page may still be holding the one from before it.
+    const { data: fresh } = await refetchWinnings();
+    const v = await winnings.reveal(fresh as Hex | undefined);
+    if (v === null) return;
+    showResult({ won: v > 0n, amount: v, round: "" });
+  }
 
   return (
     <div className="min-h-screen">
-      <header className="mx-auto flex max-w-[1100px] items-center gap-6 px-7 pt-8 pb-14">
-        <span className="wide mr-auto text-[19px] font-bold">
-          Pool<span className="text-brass-deep">2</span>geda
-        </span>
-        <span className="label hidden text-slate sm:block">Sepolia</span>
-        <ConnectButton.Custom>
-          {({ openConnectModal: open, openAccountModal, mounted }) => (
-            <button
-              type="button"
-              onClick={isConnected ? openAccountModal : open}
-              disabled={!mounted}
-              className={
-                "wide cursor-pointer rounded-[3px] px-4 py-2.5 text-[13px] font-semibold transition-colors " +
-                (isConnected
-                  ? "bg-transparent text-ink ring-1 ring-inset ring-line hover:ring-ink"
-                  : "bg-ink text-field hover:bg-slate")
-              }
-            >
-              {isConnected && address ? shortAddress(address) : "Connect a wallet"}
-            </button>
+      {/* ── nav ───────────────────────────────────────────────────────── */}
+      <header className="sticky top-0 z-50 border-b border-line bg-bg/85 backdrop-blur-md">
+        <div className="mx-auto flex max-w-[1080px] items-center gap-4 px-5 py-3.5">
+          <button
+            type="button"
+            onClick={() => setTab("pool")}
+            className="flex cursor-pointer items-center gap-2.5 font-extrabold"
+          >
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-accent text-[15px] text-white">
+              P
+            </span>
+            <span className="text-[17px]">Pool2geda</span>
+          </button>
+
+          {isConnected && !wrongNetwork && (
+            <nav className="ml-4 hidden gap-1 sm:flex">
+              {(["pool", "account"] as Tab[]).map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => setTab(t)}
+                  className={
+                    "cursor-pointer rounded-ctl px-4 py-2 text-[14px] font-bold capitalize transition-colors " +
+                    (tab === t
+                      ? "bg-surface-2 text-text"
+                      : "text-muted hover:text-text")
+                  }
+                >
+                  {t}
+                </button>
+              ))}
+            </nav>
           )}
-        </ConnectButton.Custom>
+
+          <div className="ml-auto flex items-center gap-2.5">
+            <span className="hidden sm:block">
+              <Badge tone={wrongNetwork ? "danger" : "neutral"}>
+                {wrongNetwork ? "Wrong network" : "Sepolia"}
+              </Badge>
+            </span>
+            <ConnectButton.Custom>
+              {({ openConnectModal: open, openAccountModal, mounted }) => (
+                <button
+                  type="button"
+                  onClick={isConnected ? openAccountModal : open}
+                  disabled={!mounted}
+                  className={
+                    "cursor-pointer rounded-ctl px-4 py-2 text-[13px] font-bold transition-colors " +
+                    (isConnected
+                      ? "border border-line bg-surface-2 text-text hover:border-accent-soft"
+                      : "bg-accent text-white hover:bg-accent-soft")
+                  }
+                >
+                  {isConnected && address ? shortAddress(address) : "Connect wallet"}
+                </button>
+              )}
+            </ConnectButton.Custom>
+          </div>
+        </div>
+
+        {/* Tabs drop to their own row on narrow screens rather than crowding
+            the wallet button off the edge. */}
+        {isConnected && !wrongNetwork && (
+          <div className="mx-auto flex max-w-[1080px] gap-1 px-5 pb-3 sm:hidden">
+            {(["pool", "account"] as Tab[]).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTab(t)}
+                className={
+                  "flex-1 cursor-pointer rounded-ctl px-4 py-2 text-[14px] font-bold capitalize transition-colors " +
+                  (tab === t ? "bg-surface-2 text-text" : "text-muted")
+                }
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        )}
       </header>
 
-      <main className="mx-auto max-w-[1100px] px-7 pb-24">
+      <main className="mx-auto max-w-[1080px] px-5 pt-7 pb-20">
         {notice && <NoticeBar notice={notice} onDismiss={dismissNotice} />}
 
-        {!configured && (
+        {!c && (
           <NoticeBar
             notice={{
               tone: "bad",
-              title: "No deployment behind this build",
+              title: "No deployment configured",
               body: `Missing ${missingContractEnv.join(", ")}. Copy web/.env.example to web/.env, or run the deploy script, which fills it in.`,
             }}
           />
         )}
 
         {wrongNetwork && (
-          <NoticeBar
-            notice={{
-              tone: "bad",
-              title: "Wrong network",
-              body: "This runs on Sepolia — the encryption protocol is not deployed anywhere else. Switch your wallet across and the app opens up.",
-            }}
-          />
+          <div className="rounded-card border border-danger/30 bg-danger/10 p-7 text-center">
+            <h2 className="m-0 text-[20px] font-extrabold text-danger">
+              Switch to Sepolia
+            </h2>
+            <p className="mx-auto m-0 mt-2 mb-5 max-w-[46ch] text-[14px] text-muted">
+              The Zama encryption protocol only runs on Sepolia, so the app can’t
+              read or write anything from the network you’re on.
+            </p>
+            <Button onClick={() => switchChain({ chainId: sepolia.id })}>
+              Switch network
+            </Button>
+          </div>
         )}
 
-        {configured && !wrongNetwork && (
+        {c && !wrongNetwork && (
           <>
-            {screen === "arrival" && (
-              <Arrival onConnect={() => openConnectModal?.()} />
-            )}
+            {!isConnected && <Landing onConnect={() => openConnectModal?.()} />}
 
-            {screen === "setup" && (
-              <Setup
-                setup={setup}
-                step={step}
-                onCancel={topUp ? () => setTopUp(false) : undefined}
-                onDeposited={() => {
-                  setTopUp(false);
-                  setNonce((n) => n + 1);
+            {isConnected && tab === "pool" && (
+              <PoolTab
+                refreshKey={nonce}
+                onChanged={bump}
+                shares={shares}
+                onOpenResult={() => {
+                  setTab("account");
+                  void revealResult();
                 }}
               />
             )}
 
-            {screen === "account" && (
-              <Account
-                refreshKey={nonce}
-                onTopUp={() => setTopUp(true)}
-                onChanged={() => setNonce((n) => n + 1)}
+            {isConnected && tab === "account" && (
+              <AccountTab
+                setup={setup}
+                shares={shares}
+                winnings={winnings}
+                sharesHandle={sharesHandle as Hex | undefined}
+                winningsHandle={winningsHandle as Hex | undefined}
+                onChanged={bump}
+                onOpen={setAction}
+                walletBalance={walletBalance}
               />
             )}
           </>
         )}
       </main>
 
-      {contracts && (
-        <footer className="mx-auto max-w-[1100px] px-7 pb-14">
-          <div className="flex flex-wrap items-center gap-x-10 gap-y-2 border-t border-line pt-5">
-            <Serial label="Pool" value={contracts.prizePool} />
-            <Serial label="Private token" value={contracts.confidentialUsd} />
-            <Serial label="Asset" value={contracts.testUsd} />
-            <span className="data ml-auto text-slate">Chain 11155111</span>
+      {c && (
+        <footer className="border-t border-line">
+          <div className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-x-6 gap-y-2 px-5 py-6 text-[12px] text-muted">
+            <a
+              href={`https://sepolia.etherscan.io/address/${c.prizePool}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mono transition-colors hover:text-text"
+            >
+              Pool {shortAddress(c.prizePool)}
+            </a>
+            <a
+              href={`https://sepolia.etherscan.io/address/${c.confidentialUsd}`}
+              target="_blank"
+              rel="noreferrer"
+              className="mono transition-colors hover:text-text"
+            >
+              cUSD {shortAddress(c.confidentialUsd)}
+            </a>
+            <a
+              href="https://github.com/manoahLinks/Pool2geda"
+              target="_blank"
+              rel="noreferrer"
+              className="transition-colors hover:text-text"
+            >
+              Source
+            </a>
+            <span className="ml-auto">Testnet only · tokens have no value</span>
           </div>
         </footer>
       )}
 
+      {action && (
+        <ActionModal
+          action={action}
+          onAction={setAction}
+          onClose={() => setAction(null)}
+          onDone={bump}
+          knownStake={shares.value}
+        />
+      )}
       {busy && <BusyOverlay kind={busy.kind} startedAt={busy.startedAt} />}
       {result && <ResultModal result={result} onClose={closeResult} />}
     </div>
-  );
-}
-
-/// The real addresses in use, printed the way an instrument carries its plate
-/// marks. Verifiable, not decorative.
-function Serial({ label, value }: { label: string; value: string }) {
-  return (
-    <a
-      href={`https://sepolia.etherscan.io/address/${value}`}
-      target="_blank"
-      rel="noreferrer"
-      className="data text-slate transition-colors hover:text-ink"
-    >
-      <span className="label mr-2 text-slate">{label}</span>
-      {shortAddress(value)}
-    </a>
   );
 }

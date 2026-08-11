@@ -10,9 +10,12 @@ const artifacts = resolve(here, "../../contracts/artifacts/contracts");
 const outDir = resolve(here, "../src/abi");
 
 const TARGETS = [
-  ["TestUSD.sol/TestUSD.json", "testUsd"],
   ["ConfidentialUSD.sol/ConfidentialUSD.json", "confidentialUsd"],
   ["ConfidentialPrizePool.sol/ConfidentialPrizePool.json", "prizePool"],
+  // The interface, not a concrete source: the frontend asks whatever is wired
+  // in what it has accrued, and must keep working when the implementation is
+  // swapped for a real one.
+  ["IConfidentialYieldSource.sol/IConfidentialYieldSource.json", "yieldSource"],
 ];
 
 if (!existsSync(artifacts)) {

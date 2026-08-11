@@ -6,16 +6,14 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 const EPOCH = 24 * 3600; // 1 day
 const PRIZE = 10_000_000n; // 10 cUSD (6 decimals)
+const FAUCET = 1_000_000_000n; // ConfidentialUSD.FAUCET_AMOUNT — 1,000 cUSD
 const FAR_FUTURE = Math.floor(Date.now() / 1000) + 100 * 365 * 24 * 3600;
 
 async function deployFixture() {
   const signers = await ethers.getSigners();
   const [deployer] = signers;
 
-  const usd = await (await ethers.getContractFactory("TestUSD")).deploy(deployer.address);
-  const usdAddr = await usd.getAddress();
-
-  const cusd = await (await ethers.getContractFactory("ConfidentialUSD")).deploy(usdAddr);
+  const cusd = await (await ethers.getContractFactory("ConfidentialUSD")).deploy();
   const cusdAddr = await cusd.getAddress();
 
   const pool = await (
@@ -23,20 +21,30 @@ async function deployFixture() {
   ).deploy(cusdAddr, EPOCH, PRIZE, deployer.address);
   const poolAddr = await pool.getAddress();
 
-  return { usd, usdAddr, cusd, cusdAddr, pool, poolAddr, signers, deployer };
+  return { cusd, cusdAddr, pool, poolAddr, signers, deployer };
 }
 
-/// Mint -> approve -> wrap -> grant the pool operator rights.
+/// Claim from the confidential faucet until `who` holds at least `amount`,
+/// then let the pool move their tokens.
+///
+/// No mint/approve/wrap: cUSD is confidential from birth, so funding is a
+/// single permissionless call and no per-user amount is ever published.
 async function fund(
   ctx: Awaited<ReturnType<typeof deployFixture>>,
   who: HardhatEthersSigner,
   amount: bigint
 ) {
-  const { usd, cusd, cusdAddr, poolAddr, deployer } = ctx;
-  await usd.connect(deployer).mintTo(who.address, amount);
-  await usd.connect(who).approve(cusdAddr, amount);
-  await cusd.connect(who).wrap(who.address, amount);
+  const { cusd, poolAddr } = ctx;
+  const claims = amount / FAUCET + (amount % FAUCET ? 1n : 0n);
+  for (let i = 0n; i < claims; i++) {
+    if (i > 0n) await time.increase(3601); // faucet cooldown
+    await cusd.connect(who).faucet();
+  }
   await cusd.connect(who).setOperator(poolAddr, FAR_FUTURE);
+  // The faucet mints a fixed amount, so the holder ends up with at least what
+  // was asked for and usually more. Return the real figure rather than letting
+  // callers assume.
+  return claims * FAUCET;
 }
 
 async function encrypted(
@@ -114,7 +122,7 @@ describe("ConfidentialPrizePool", function () {
     it("returns full principal on withdraw — no loss", async function () {
       const ctx = await deployFixture();
       const alice = ctx.signers[1];
-      await fund(ctx, alice, 100_000_000n);
+      const funded = await fund(ctx, alice, 100_000_000n);
       await deposit(ctx, alice, 40_000_000n);
 
       const e = await encrypted(ctx.poolAddr, alice, 40_000_000n);
@@ -123,7 +131,7 @@ describe("ConfidentialPrizePool", function () {
       expect(await decryptFor(await ctx.pool.sharesOf(alice.address), ctx.poolAddr, alice)).to.equal(0n);
 
       const bal = await ctx.cusd.confidentialBalanceOf(alice.address);
-      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(100_000_000n);
+      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(funded);
     });
 
     it("withdrawing more than balance moves zero and does not corrupt shares", async function () {
@@ -132,7 +140,7 @@ describe("ConfidentialPrizePool", function () {
       // would underflow and wrap to a huge number.
       const ctx = await deployFixture();
       const alice = ctx.signers[1];
-      await fund(ctx, alice, 100_000_000n);
+      const funded = await fund(ctx, alice, 100_000_000n);
       await deposit(ctx, alice, 10_000_000n);
 
       const e = await encrypted(ctx.poolAddr, alice, 999_000_000n);
@@ -142,7 +150,7 @@ describe("ConfidentialPrizePool", function () {
       // and shares land on 0 rather than wrapping.
       expect(await decryptFor(await ctx.pool.sharesOf(alice.address), ctx.poolAddr, alice)).to.equal(0n);
       const bal = await ctx.cusd.confidentialBalanceOf(alice.address);
-      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(100_000_000n);
+      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(funded);
     });
 
     it("keeps withdrawals open while a draw is live", async function () {
@@ -413,6 +421,240 @@ describe("ConfidentialPrizePool", function () {
       const draw1 = await ctx.pool.draws(1);
       expect(draw1.totalCumulative).to.be.greaterThan(0n);
       expect(draw1.awarded).to.equal(true);
+    });
+  });
+
+  describe("yield source", function () {
+    /// Deploy a source, fund it, and hand it to the pool.
+    async function withSource(
+      ctx: Awaited<ReturnType<typeof deployFixture>>,
+      kind: "admin" | "streaming",
+      funding: bigint
+    ) {
+      const { cusdAddr, poolAddr, deployer, pool, cusd } = ctx;
+      const src =
+        kind === "admin"
+          ? await (
+              await ethers.getContractFactory("AdminFundedYieldSource")
+            ).deploy(cusdAddr, poolAddr, PRIZE, deployer.address)
+          : await (
+              await ethers.getContractFactory("StreamingYieldSource")
+            ).deploy(cusdAddr, poolAddr, 1_000n, PRIZE * 10n, deployer.address);
+
+      const srcAddr = await src.getAddress();
+      await fund(ctx, deployer, funding);
+      await cusd.connect(deployer).setOperator(srcAddr, FAR_FUTURE);
+      await src.connect(deployer).fund(funding);
+      await pool.connect(deployer).setYieldSource(srcAddr);
+      return { src, srcAddr };
+    }
+
+    it("fills the reserve on close, so a winner is paid from harvested yield", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // The reserve is never funded directly — everything the winner receives
+      // must arrive through the interface.
+      await withSource(ctx, "admin", 100_000_000n);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(PRIZE);
+    });
+
+    it("a streaming source pays more after a longer round", async function () {
+      const ctx = await deployFixture();
+      const { src } = await withSource(ctx, "streaming", 500_000_000n);
+
+      const short = await src.accrued();
+      await time.increase(600);
+      const longer = await src.accrued();
+
+      expect(longer).to.be.greaterThan(short);
+      // And it is bounded, so a long silence cannot drain the stream into one
+      // round.
+      await time.increase(EPOCH * 100);
+      expect(await src.accrued()).to.equal(PRIZE * 10n);
+    });
+
+    it("pays a winner what the reserve holds when it is short of the ceiling", async function () {
+      // THE regression. The old gate was all-or-nothing — ge(reserve, prize) —
+      // so a reserve one cent below the ceiling credited every winner ZERO.
+      // Invisible by construction: a loss and an unpayable win are the same
+      // observation, so the pool simply looked like nobody ever won. A
+      // streaming source makes this the normal case, not an edge one.
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // Reserve deliberately just under the advertised prize.
+      const short = PRIZE - 1n;
+      await withSource(ctx, "admin", short);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      // Sole depositor holds the whole TWAB, so she wins. She must receive the
+      // reserve rather than nothing.
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(short);
+      expect(won).to.be.greaterThan(0n);
+    });
+
+    it("credits the reserve by what moved, not by what was requested", async function () {
+      // The source is funded with less than one round's prize. ERC-7984
+      // saturates, so the transfer succeeds having moved only what was there —
+      // crediting the request would invent reserve against tokens that never
+      // arrived, and eventually pay a prize out of principal.
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      const funded = await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      const short = PRIZE / 4n;
+      await withSource(ctx, "admin", short);
+
+      await runDraw(ctx, 0);
+      await ctx.pool.connect(alice).checkPrize(0);
+
+      // A quarter of the prize was funded, so a quarter of the prize is paid —
+      // bounded by the reserve, never overdrawing it.
+      const won = await decryptFor(
+        await ctx.pool.winningsOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      expect(won).to.equal(short);
+
+      // Principal is untouched throughout.
+      const e = await encrypted(ctx.poolAddr, alice, 50_000_000n);
+      await ctx.pool.connect(alice).withdraw(e.handle, e.proof);
+      expect(
+        await decryptFor(await ctx.cusd.confidentialBalanceOf(alice.address), ctx.cusdAddr, alice)
+      ).to.equal(funded);
+    });
+
+    it("is optional — an unset source leaves the pool working as before", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+      await expect(runDraw(ctx, 0)).to.not.be.reverted;
+    });
+
+    it("refuses harvest from anyone but the pool", async function () {
+      const ctx = await deployFixture();
+      const { src } = await withSource(ctx, "admin", 100_000_000n);
+      await expect(
+        src.connect(ctx.signers[1]).harvest(ctx.signers[1].address, PRIZE)
+      ).to.be.revertedWithCustomError(src, "OnlyPool");
+    });
+  });
+
+  describe("participant registry", function () {
+    it("records each depositor exactly once, however often they deposit", async function () {
+      const ctx = await deployFixture();
+      const [, alice, bob] = ctx.signers;
+
+      expect(await ctx.pool.participantCount()).to.equal(0n);
+
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 10_000_000n);
+      await deposit(ctx, alice, 10_000_000n); // same depositor again
+      await fund(ctx, bob, 100_000_000n);
+      await deposit(ctx, bob, 10_000_000n);
+
+      expect(await ctx.pool.participantCount()).to.equal(2n);
+      expect(await ctx.pool.participants()).to.deep.equal([alice.address, bob.address]);
+      expect(await ctx.pool.isParticipant(alice.address)).to.equal(true);
+      expect(await ctx.pool.isParticipant(ctx.signers[3].address)).to.equal(false);
+    });
+  });
+
+  describe("dead time", function () {
+    it("crosses a long gap in one call and mints no unclaimable draw", async function () {
+      const ctx = await deployFixture();
+      const alice = ctx.signers[1];
+      await fund(ctx, alice, 100_000_000n);
+      await deposit(ctx, alice, 50_000_000n);
+
+      // Nobody closes for ten epochs.
+      await time.increaseTo((await ctx.pool.epochEndsAt()) + BigInt(EPOCH * 10));
+      await expect(ctx.pool.closeEpoch()).to.emit(ctx.pool, "DeadEpochsSkipped");
+
+      // One call crossed the whole gap rather than advancing a single period.
+      expect(await ctx.pool.epoch()).to.equal(11n);
+      // And the pool is live again: the new epoch has not already expired.
+      expect(await ctx.pool.epochEndsAt()).to.be.greaterThan(
+        BigInt((await ethers.provider.getBlock("latest"))!.timestamp)
+      );
+      // No draw was created for the skipped round — a prize nobody could claim
+      // is worse than no prize.
+      expect(await ctx.pool.pendingTotalHandle(0)).to.equal(ethers.ZeroHash);
+    });
+
+    it("does not hand an idle depositor a guaranteed win after dead time", async function () {
+      // THE invariant. Fast-forwarding the clock without advancing the epoch
+      // counter by the same number of periods inflates `_cumPrev` to the whole
+      // gap while `_totalCumPrev` still holds one epoch — after which
+      // uniform(prn, total) can never exceed it and the idle user wins every
+      // draw with certainty. Assert the accumulators still account for the
+      // public total and nothing more.
+      const ctx = await deployFixture();
+      const [, alice, bob] = ctx.signers;
+
+      await fund(ctx, alice, 20_000_000n);
+      await deposit(ctx, alice, 20_000_000n);
+      await fund(ctx, bob, 20_000_000n);
+      await deposit(ctx, bob, 20_000_000n);
+
+      // Long silence, then a catch-up close that skips the dead rounds.
+      await time.increaseTo((await ctx.pool.epochEndsAt()) + BigInt(EPOCH * 20));
+      await ctx.pool.closeEpoch();
+
+      // Now a real round runs to completion.
+      const live = await ctx.pool.epoch();
+      await runDraw(ctx, Number(live));
+
+      await ctx.pool.connect(alice).checkPrize(live);
+      await ctx.pool.connect(bob).checkPrize(live);
+
+      const total = (await ctx.pool.draws(live)).totalCumulative;
+      const a = await decryptFor(
+        await ctx.pool.cumulativePrevOf(alice.address),
+        ctx.poolAddr,
+        alice
+      );
+      const b = await decryptFor(
+        await ctx.pool.cumulativePrevOf(bob.address),
+        ctx.poolAddr,
+        bob
+      );
+
+      console.log(
+        `      after 20 dead epochs: alice=${a} bob=${b} total=${total} ` +
+          `(sum/total = ${Number(((a + b) * 10000n) / total) / 100}%)`
+      );
+
+      // Neither may exceed the modulus — that is precisely the rigged-draw bug.
+      expect(a).to.be.lessThanOrEqual(total);
+      expect(b).to.be.lessThanOrEqual(total);
+      // And together they still account for the whole public total, so odds
+      // sum to one rather than to twenty.
+      expect(Number(((a + b) * 10000n) / total) / 100).to.be.closeTo(100, 1);
     });
   });
 

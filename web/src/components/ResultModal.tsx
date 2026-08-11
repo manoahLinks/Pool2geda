@@ -3,17 +3,15 @@ import { Button } from "@/components/ui";
 import { formatMoney } from "@/lib/format";
 import type { Result } from "@/lib/shell";
 
-/// The one moment the whole product builds towards.
+/// The moment the product builds towards.
 ///
 /// Everything before it is deliberately undramatic — that is the privacy
-/// argument, and the reason a win and a loss cost identical gas and look
-/// identical on-chain. But the instant a saver decrypts their own winnings they
-/// learn something no one else on earth can learn, and the interface should
-/// behave as though it knows that. So it takes the screen, and the figure
-/// arrives in brass: the colour this design spends on nothing else.
+/// argument, and why a win and a loss cost identical gas and look identical
+/// onchain. But the instant someone decrypts their own winnings they learn
+/// something nobody else on earth can, and the interface should act like it
+/// knows that.
 ///
-/// A loss is not punished. Nothing was lost — that is the entire product — so
-/// it says exactly that and points at the next round.
+/// A loss is not punished. Nothing was lost — that is the entire product.
 export function ResultModal({
   result,
   onClose,
@@ -31,44 +29,44 @@ export function ResultModal({
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/45 p-6">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-5 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <div
         ref={panel}
         tabIndex={-1}
         role="alertdialog"
         aria-label="Your result"
-        className="rise relative w-[min(520px,100%)] overflow-hidden rounded-plate bg-plate px-11 py-12 text-center outline-none"
+        onClick={(e) => e.stopPropagation()}
+        className="pop w-[min(440px,100%)] rounded-card border border-line bg-surface p-8 text-center outline-none"
       >
-        {/* Deliberately unornamented. The figure has just come out of a seal —
-            putting the pattern back behind it would undo the one thing this
-            moment is for. Brass on plate, and nothing else. */}
-        <div className="relative">
-          <div className="label text-slate">
-            Round {result.round.padStart(3, "0")} · readable only by you
-          </div>
+        <div className="text-[40px]">{result.won ? "🎉" : "🔒"}</div>
 
-          <div
-            className={
-              "fig resolve mt-8 text-[clamp(46px,10vw,80px)] " +
-              (result.won ? "text-brass" : "text-ink")
-            }
-          >
-            {formatMoney(result.amount)}
-            <span className="label ml-3 align-baseline text-slate">USD</span>
-          </div>
+        <div className="label mt-4">Only you can read this</div>
+        <div
+          className={
+            "num mt-3 text-[clamp(40px,9vw,58px)] leading-none font-extrabold " +
+            (result.won ? "text-mint" : "text-text")
+          }
+        >
+          {formatMoney(result.amount)}
+          <span className="ml-2 text-[18px] font-bold">cUSD</span>
+        </div>
 
-          <h2 className="wide m-0 mt-8 text-[24px] leading-[1.15] font-semibold">
-            {result.won ? "The prize came to you." : "Not this round."}
-          </h2>
-          <p className="m-0 mx-auto mt-4 max-w-[38ch] text-[15px] leading-[1.65] text-slate">
-            {result.won
-              ? "It is sitting in your winnings, and nothing on the chain records that it landed with you. Move it across whenever you like."
-              : "Your holding is exactly where you left it, and its weight carries into the next round."}
-          </p>
+        <h2 className="m-0 mt-5 text-[21px] font-extrabold">
+          {result.won ? "You won this round" : "Not this round"}
+        </h2>
+        <p className="mx-auto m-0 mt-2.5 max-w-[36ch] text-[14px] leading-relaxed text-muted">
+          {result.won
+            ? "It's in your winnings, and nothing onchain records that it landed with you. Claim it whenever you like."
+            : "Your deposit is exactly where you left it, and its weight carries into the next round."}
+        </p>
 
-          <div className="mt-10">
-            <Button onClick={onClose}>Close</Button>
-          </div>
+        <div className="mt-7">
+          <Button full size="lg" variant={result.won ? "mint" : "ghost"} onClick={onClose}>
+            {result.won ? "Nice" : "Close"}
+          </Button>
         </div>
       </div>
     </div>

@@ -3,45 +3,40 @@ import { Rosette } from "@/components/Rosette";
 import { contracts } from "@/config/contracts";
 import type { BusyKind } from "@/lib/shell";
 
-/// What each wait is, in the saver's terms.
+/// What each wait is, in the user's terms.
 ///
-/// `expected` is the honest measured duration, not a target: the browser proof
-/// really does take 10–14 seconds, and Sepolia really does take 12–30. The
-/// hardest of the three is `proof`, because it runs before the wallet opens —
-/// there is no popup to reassure anyone, so silence there reads as a broken
-/// app. That wait gets the fullest explanation.
+/// `expected` is measured, not aspirational. The hardest of the three is
+/// `proof`, because it runs before the wallet opens — there is no popup to
+/// reassure anyone, so silence there reads as a broken app. That one gets the
+/// fullest explanation.
 const PLANS: Record<
   BusyKind,
   { title: string; body: string; foot: string; expected: number }
 > = {
   proof: {
-    title: "Encrypting on this device",
-    body: "Your amount is being sealed here, in this tab, together with a proof binding it to your address. The readable number never leaves the machine. Your wallet opens once it is ready.",
-    foot: "Typically 10–14 seconds",
+    title: "Encrypting in your browser",
+    body: "Your amount is being encrypted on this device, with a zero-knowledge proof binding it to your address. The readable number never leaves the tab. Your wallet opens when it's ready.",
+    foot: "Usually 10–14 seconds",
     expected: 12_000,
   },
   tx: {
-    title: "Waiting on the network",
-    body: "Sent. Nothing further is needed from you.",
-    foot: "Typically 12–30 seconds",
+    title: "Confirming onchain",
+    body: "Transaction sent. Nothing else is needed from you.",
+    foot: "Usually 12–30 seconds",
     expected: 20_000,
   },
   settle: {
     title: "Settling the round",
-    body: "The round's two public figures are being decrypted and proved back to the contract. This step is open to anyone and discloses nothing about any individual.",
+    body: "Decrypting the round's two public figures and proving them back to the contract. Anyone can run this step, and it reveals nothing about any individual.",
     foot: "A few seconds",
     expected: 8_000,
   },
 };
 
-/// Approach the end without ever claiming to have reached it.
-///
-/// A bar that hits 100% and then sits there is worse than no bar at all, and
-/// these durations are genuinely variable. This eases toward 95% along the
-/// expected curve and only completes when the work actually does — by which
-/// point the overlay is already gone.
+/// Approach the end without ever claiming to have reached it. A bar that hits
+/// 100% and sits there is worse than no bar, and these durations genuinely vary.
 function progress(elapsed: number, expected: number): number {
-  return 0.95 * (1 - Math.exp(-elapsed / (expected / 2.5)));
+  return 0.94 * (1 - Math.exp(-elapsed / (expected / 2.5)));
 }
 
 export function BusyOverlay({
@@ -68,32 +63,28 @@ export function BusyOverlay({
       role="alertdialog"
       aria-live="assertive"
       aria-label="Working"
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-field/94 p-6 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-bg/85 p-5 backdrop-blur-md"
     >
-      <div className="rise w-[min(500px,100%)] rounded-plate bg-plate px-10 py-11">
-        <div className="mb-9 flex justify-center">
-          {/* Seeded from the pool's own address — real, public, and never
-              anything derived from the amount being sealed. */}
+      <div className="pop w-[min(440px,100%)] rounded-card border border-line bg-surface p-8 text-center">
+        <div className="mb-6 flex justify-center">
           <Rosette
             seed={contracts?.prizePool}
-            size={104}
+            size={72}
             spin
-            className="text-slate/70"
+            className="text-accent-soft"
           />
         </div>
-        <div className="label mb-3 text-center text-slate">{plan.foot}</div>
-        <h2 className="wide m-0 text-center text-[26px] leading-[1.15] font-semibold">
-          {plan.title}
-        </h2>
-        <p className="m-0 mx-auto mt-4 max-w-[44ch] text-center text-[14px] leading-[1.65] text-slate">
+        <h2 className="m-0 text-[20px] font-extrabold">{plan.title}</h2>
+        <p className="mx-auto m-0 mt-3 max-w-[42ch] text-[14px] leading-relaxed text-muted">
           {plan.body}
         </p>
-        <div className="mt-9 h-px w-full bg-line">
+        <div className="mt-7 h-1.5 overflow-hidden rounded-full bg-surface-2">
           <div
-            className="h-px bg-ink transition-[width] duration-200 ease-linear"
+            className="h-full rounded-full bg-accent transition-[width] duration-200 ease-linear"
             style={{ width: `${Math.round(pct * 100)}%` }}
           />
         </div>
+        <div className="label mt-3">{plan.foot}</div>
       </div>
     </div>
   );

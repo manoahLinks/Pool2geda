@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { WagmiProvider } from "wagmi";
-import { RainbowKitProvider, lightTheme } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { wagmiConfig } from "@/config/wagmi";
@@ -15,10 +15,10 @@ const queryClient = new QueryClient({
 
 /// The wallet modal is the one surface this app does not draw itself, so it is
 /// themed to sit inside the page rather than arrive from a different product.
-const walletTheme = lightTheme({
-  accentColor: "#0f2027",
-  accentColorForeground: "#e7eae7",
-  borderRadius: "small",
+const walletTheme = darkTheme({
+  accentColor: "#6d4aff",
+  accentColorForeground: "#ffffff",
+  borderRadius: "medium",
   fontStack: "system",
 });
 

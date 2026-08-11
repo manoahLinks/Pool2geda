@@ -1,35 +1,36 @@
 import type { ReactNode } from "react";
-import { GuillocheBand } from "@/components/Guilloche";
+import type { Notice } from "@/lib/shell";
 
-/// A panel on the certificate. Engraved rule above, small-caps caption — the
-/// way a section is titled on a share certificate rather than a dashboard.
-export function Panel({
-  caption,
+/// A raised surface. Defined by tone alone — no border, no shadow, 4px radius.
+/// The instrument's panels, not an app's cards.
+export function Plate({
   children,
   className = "",
 }: {
-  caption?: string;
   children: ReactNode;
   className?: string;
 }) {
   return (
-    <section
-      className={
-        "border border-ink/15 bg-stock-2/40 px-5 py-4 shadow-[0_1px_0_rgba(18,33,27,0.06)] " +
-        className
-      }
-    >
-      {caption && (
-        <div className="mb-3 flex items-center gap-3">
-          <h2 className="serif-caps text-[10px] text-bank">{caption}</h2>
-          <span className="h-px flex-1 bg-ink/12" />
-        </div>
-      )}
-      {children}
-    </section>
+    <section className={`rounded-plate bg-plate ${className}`}>{children}</section>
   );
 }
 
+/// A section mark. Mono, tracked, uppercase — the way an instrument annotates
+/// its own dials rather than the way a website titles a card.
+export function Label({
+  children,
+  tone = "slate",
+}: {
+  children: ReactNode;
+  tone?: "slate" | "ink" | "brass";
+}) {
+  const c =
+    tone === "ink" ? "text-ink" : tone === "brass" ? "text-brass-deep" : "text-slate";
+  return <div className={`label ${c}`}>{children}</div>;
+}
+
+/// Buttons are rectangles with a 3px radius. Nothing here is a pill: pills read
+/// as consumer software, and this is meant to read as an instrument.
 export function Button({
   children,
   onClick,
@@ -37,163 +38,132 @@ export function Button({
   busy,
   variant = "primary",
   size = "md",
+  title,
 }: {
   children: ReactNode;
   onClick?: () => void;
   disabled?: boolean;
   busy?: boolean;
-  variant?: "primary" | "ghost";
-  size?: "md" | "lg";
+  variant?: "primary" | "quiet" | "bare";
+  size?: "sm" | "md" | "lg";
+  title?: string;
 }) {
+  const sizing =
+    size === "lg"
+      ? "text-[15px] px-7 py-4"
+      : size === "sm"
+        ? "text-[13px] px-4 py-2.5"
+        : "text-[14px] px-5 py-3";
+
+  const look =
+    variant === "primary"
+      ? "bg-ink text-field hover:bg-slate"
+      : variant === "quiet"
+        ? "bg-transparent text-ink ring-1 ring-inset ring-line hover:ring-ink"
+        : "bg-transparent text-slate hover:text-ink underline underline-offset-4 decoration-line hover:decoration-ink";
+
   return (
     <button
+      type="button"
+      title={title}
       onClick={onClick}
       disabled={disabled || busy}
       className={
-        "serif-caps inline-flex items-center justify-center gap-2 border transition " +
-        "disabled:cursor-not-allowed disabled:opacity-35 " +
-        (size === "lg" ? "px-6 py-3 text-[11px] " : "px-4 py-2 text-[10px] ") +
-        (variant === "primary"
-          ? "border-ink bg-ink text-stock hover:bg-bank hover:border-bank"
-          : "border-ink/30 text-ink hover:border-ink hover:bg-ink/[0.04]")
+        "wide inline-flex cursor-pointer items-center justify-center gap-2.5 rounded-[3px] font-semibold " +
+        "transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-35 " +
+        `${sizing} ${look}`
       }
     >
       {busy && (
-        <span className="h-3 w-3 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border-[1.5px] border-current/25 border-t-current" />
       )}
       {children}
     </button>
   );
 }
 
+/// An amount, entered in the same face the resolved figure will appear in — so
+/// what you type already looks like what you are about to seal.
 export function AmountField({
   value,
   onChange,
-  suffix,
+  unit,
+  hint,
   disabled,
-  placeholder = "0.00",
+  label,
 }: {
   value: string;
   onChange: (v: string) => void;
-  suffix?: string;
+  unit: string;
+  hint?: string;
   disabled?: boolean;
-  placeholder?: string;
+  label: string;
 }) {
-  return (
-    <div className="flex items-baseline gap-2 border-b border-ink/25 px-1 py-1.5 focus-within:border-ink">
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        inputMode="decimal"
-        className="w-full bg-transparent font-mono text-lg tabular-nums outline-none placeholder:text-faint/50 disabled:opacity-50"
-      />
-      {suffix && (
-        <span className="serif-caps shrink-0 text-[9px] text-faint">{suffix}</span>
-      )}
-    </div>
-  );
-}
-
-export function Notice({
-  kind = "info",
-  children,
-}: {
-  kind?: "error" | "info";
-  children: ReactNode;
-}) {
-  return (
-    <div
-      className={
-        "border-l-2 py-1.5 pl-3 text-[12px] leading-relaxed " +
-        (kind === "error"
-          ? "border-carmine bg-carmine/[0.05] text-carmine"
-          : "border-bank/40 text-faint")
-      }
-    >
-      {children}
-    </div>
-  );
-}
-
-/// A value the chain holds as ciphertext.
-///
-/// Sealed, it is drawn as guilloche generated from the handle itself — the
-/// same role the lathe-work plays on a banknote: intricate, precise, and
-/// impossible to read back. Decryption strikes the figure onto the paper.
-export function Sealed({
-  handle,
-  value,
-  busy,
-  onReveal,
-  suffix,
-  size = "md",
-}: {
-  handle?: string;
-  value: bigint | null;
-  busy?: boolean;
-  onReveal?: () => void;
-  suffix?: string;
-  size?: "sm" | "md" | "lg";
-}) {
-  const dims =
-    size === "lg"
-      ? { w: 210, h: 34, text: "text-4xl" }
-      : size === "sm"
-        ? { w: 120, h: 20, text: "text-base" }
-        : { w: 165, h: 26, text: "text-2xl" };
-
-  if (value !== null) {
-    return (
-      <span className={`struck engraved ${dims.text} text-ink`}>
-        {value.toString()}
-        {suffix && (
-          <span className="serif-caps ml-1.5 align-middle text-[9px] text-faint">
-            {suffix}
-          </span>
-        )}
-      </span>
-    );
-  }
-
-  return (
-    <button
-      onClick={onReveal}
-      disabled={busy || !onReveal}
-      title={onReveal ? "Decrypt with your key" : "Only the holder can read this"}
-      className="group inline-flex items-center gap-2.5 disabled:cursor-default"
-    >
-      <GuillocheBand
-        seed={handle}
-        width={dims.w}
-        height={dims.h}
-        className="text-bank"
-      />
-      {onReveal && (
-        <span className="serif-caps text-[9px] text-carmine group-hover:text-ink">
-          {busy ? "decrypting" : "decrypt"}
-        </span>
-      )}
-    </button>
-  );
-}
-
-export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div>
-      <div className="serif-caps text-[9px] text-faint">{label}</div>
-      <div className="mt-1.5">{children}</div>
+      <label htmlFor="amount" className="sr-only">
+        {label}
+      </label>
+      <div className="flex items-baseline gap-3 border-b border-line pb-2 transition-colors focus-within:border-ink">
+        <input
+          id="amount"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="0.00"
+          disabled={disabled}
+          inputMode="decimal"
+          autoComplete="off"
+          className="fig w-full min-w-0 bg-transparent text-[38px] text-ink outline-none disabled:opacity-40"
+        />
+        <span className="label shrink-0 text-slate">{unit}</span>
+      </div>
+      {hint && <div className="data mt-2 text-slate">{hint}</div>}
     </div>
   );
 }
 
-/// Serial numbers, printed in the corners the way a note carries its plate and
-/// series marks. Real values — the contract addresses actually in use.
-export function Serial({ label, value }: { label: string; value: string }) {
+/// The app says one thing at a time. Every failure, and every outcome worth
+/// remarking on, lands here rather than beside the control that caused it.
+export function NoticeBar({
+  notice,
+  onDismiss,
+}: {
+  notice: Notice;
+  /// Omitted for conditions the user cannot dismiss their way out of — a wrong
+  /// network, or a build with no deployment behind it. A × that does nothing is
+  /// worse than no ×.
+  onDismiss?: () => void;
+}) {
+  const bad = notice.tone === "bad";
   return (
-    <span className="font-mono text-[9px] tracking-wider text-faint/70">
-      <span className="text-faint/50">{label}</span> {value}
-    </span>
+    <div
+      role="status"
+      className="rise mb-10 flex items-start gap-5 border-l-2 bg-plate py-4 pr-4 pl-5"
+      style={{ borderColor: bad ? "var(--color-signal)" : "var(--color-ink)" }}
+    >
+      <div className="min-w-0 flex-1">
+        <div
+          className={
+            "wide mb-1 text-[15px] font-semibold " +
+            (bad ? "text-signal" : "text-ink")
+          }
+        >
+          {notice.title}
+        </div>
+        <div className="max-w-[68ch] text-[14px] leading-[1.6] text-slate">
+          {notice.body}
+        </div>
+      </div>
+      {onDismiss && (
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss"
+          className="shrink-0 cursor-pointer border-none bg-transparent px-1 text-lg leading-none text-slate transition-colors hover:text-ink"
+        >
+          ×
+        </button>
+      )}
+    </div>
   );
 }

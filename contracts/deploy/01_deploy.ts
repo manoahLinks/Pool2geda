@@ -61,10 +61,19 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   // Write addresses through to the frontend so the two cannot drift.
   const envPath = resolve(__dirname, "../../web/.env");
+  // The block the pool landed in. The frontend scans `Deposited` logs from
+  // here: every Sepolia RPC caps eth_getLogs by block range (the default
+  // provider at 1,000 blocks), so a scan from genesis is rejected outright and
+  // the register comes back empty on a chain with real history.
+  const deployBlock =
+    prizePool.receipt?.blockNumber ??
+    (await ethers.provider.getBlockNumber());
+
   const next: Record<string, string> = {
     VITE_TEST_USD_ADDRESS: testUsd.address,
     VITE_CONFIDENTIAL_USD_ADDRESS: confidentialUsd.address,
     VITE_PRIZE_POOL_ADDRESS: prizePool.address,
+    VITE_DEPLOY_BLOCK: String(deployBlock),
   };
 
   // Preserve any keys the user set by hand (RPC URL, WalletConnect id).

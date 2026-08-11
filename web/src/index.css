@@ -2,32 +2,44 @@
 @import "@rainbow-me/rainbowkit/styles.css";
 
 /*
-  Security printing.
+  ── Pool2geda ─────────────────────────────────────────────────────────────
+  An instrument for reading things that cannot be read.
 
-  Banknotes and share certificates are the existing visual language for "this
-  represents money, and it cannot be forged or read by the wrong person" —
-  which is precisely this product. So: intaglio line work, engraved numerals,
-  serial numbers, and guilloche where a value is sealed.
+  The one fact that makes this product unlike any other: the numbers are not
+  hidden and not absent. They are *present and illegible*. A real 32-byte value
+  sits on a public chain where anyone can fetch it, and nobody can read it. Your
+  key is the only lens that resolves it.
 
-  Deliberately not the crypto dark-mode default. Paper stock, not a void.
+  So the page is built like a precision instrument, not a consumer app.
 
-    stock   — pale grey-green paper, the colour of unprinted security paper
-    ink     — the near-black green of intaglio plate ink
-    bank    — the mid green used for the engraved line work
-    carmine — reserved for stamps and cancellations only
+  TEMPERATURE CARRIES MEANING. The whole surface is cool — drafting vellum,
+  petrol ink, slate. Brass is the only warm value in the system and it is
+  spent on exactly one thing: a figure that has been resolved, and is yours.
+  Cold is sealed. Warm is legible. Nothing else may use brass.
+
+  TYPE IS INVERTED. The usual pairing is a serif headline over a sans body.
+  Here it is the reverse: words are set in a quiet expanded grotesk, and the
+  *numerals* get the expressive high-contrast serif. This product is about
+  figures, so the figures carry the personality.
+
+  Surfaces are defined by tone, never by borders or shadows. Radii stay small.
+  All the visual energy is saved for one moment — the unseal.
 */
 @theme {
-  --color-stock: #e4e3d7;
-  --color-stock-2: #dbdacc;
-  --color-ink: #12211b;
-  --color-bank: #1f5c43;
-  --color-bank-2: #3d7a60;
-  --color-carmine: #8a1f2c;
-  --color-faint: #6b7a70;
+  --color-field: #e7eae7;      /* ground — cool drafting vellum, never cream */
+  --color-plate: #f4f6f4;      /* raised surface, a half-tone above the field */
+  --color-ink: #0f2027;        /* petrol black — the darkest thing on the page */
+  --color-slate: #4a6068;      /* secondary text, and the stroke of a sealed pattern */
+  --color-brass: #a9741a;      /* resolved figures ONLY — large sizes */
+  --color-brass-deep: #7e560f; /* the same value, at small sizes, for contrast */
+  --color-signal: #8c2f39;     /* loss, expiry, failure — nothing else */
+  --color-line: #cfd6d2;       /* hairlines, used sparingly */
 
-  --font-display: "Fraunces", ui-serif, Georgia, serif;
   --font-sans: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-fig: "Bodoni Moda", ui-serif, Georgia, serif;
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+
+  --radius-plate: 4px;
 }
 
 :root {
@@ -37,81 +49,111 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background-color: var(--color-stock);
-  /* The faint fibre and lathe texture of security paper. */
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent 0 3px,
-      color-mix(in oklab, var(--color-bank) 3%, transparent) 3px 4px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      transparent 0 3px,
-      color-mix(in oklab, var(--color-bank) 2.5%, transparent) 3px 4px
-    );
+  background-color: var(--color-field);
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-variation-settings: "wdth" 100;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
-.display {
-  font-family: var(--font-display);
-  font-variation-settings: "SOFT" 0, "WONK" 1, "opsz" 120;
-  letter-spacing: -0.025em;
-}
+/* ── Type roles ─────────────────────────────────────────────────────────── */
 
-/* Engraved numerals: the plate-printed figures on a note. The subtle text
-   shadow is the ink relief, not a glow. */
-.engraved {
-  font-family: var(--font-display);
-  font-variation-settings: "SOFT" 0, "WONK" 0, "opsz" 144;
-  font-weight: 900;
-  letter-spacing: -0.03em;
+/* Money, countdowns, counts — anything that is a figure. High-contrast Bodoni
+   at display optical size, tabular so a ticking value never shifts width. */
+.fig {
+  font-family: var(--font-fig);
+  font-variation-settings: "opsz" 96;
+  font-weight: 500;
   font-variant-numeric: tabular-nums lining-nums;
-  text-shadow: 0 1px 0 color-mix(in oklab, var(--color-stock) 70%, white);
+  letter-spacing: -0.005em;
+  line-height: 0.92;
 }
 
-/* Certificate rule — the double line that borders engraved documents. */
-.rule-double {
-  border-top: 1px solid color-mix(in oklab, var(--color-ink) 28%, transparent);
-  box-shadow: 0 3px 0 -2px color-mix(in oklab, var(--color-ink) 18%, transparent);
+/* Headlines and anything structural. Expanded grotesk reads institutional —
+   banks reach for condensed, which is why this doesn't. */
+.wide {
+  font-variation-settings: "wdth" 112;
+  letter-spacing: -0.02em;
 }
 
-.serif-caps {
-  font-family: var(--font-sans);
-  font-variation-settings: "wdth" 78;
-  font-weight: 600;
+/* The instrument's own annotations: field labels, units, section marks. */
+.label {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 10px;
   letter-spacing: 0.16em;
   text-transform: uppercase;
 }
 
-/* A cancellation stamp, rotated and bitten into the paper. */
-.stamp {
-  color: var(--color-carmine);
-  border: 2px solid color-mix(in oklab, var(--color-carmine) 65%, transparent);
-  border-radius: 3px;
-  transform: rotate(-6deg);
-  opacity: 0.86;
+/* Ciphertext handles, addresses, anything that is literally chain data. */
+.data {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
 }
 
-@keyframes plate-strike {
-  0%   { opacity: 0; transform: translateY(3px) scale(0.985); }
-  60%  { opacity: 1; }
-  100% { opacity: 1; transform: translateY(0) scale(1); }
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
 }
-.struck {
-  animation: plate-strike 300ms cubic-bezier(0.2, 0.8, 0.25, 1) both;
+
+/* The unseal. The pattern contracts and dims as the figure resolves out of it —
+   one movement, not two. This is the only elaborate motion in the product. */
+@keyframes collapse {
+  from { opacity: 0.9; transform: scale(1) rotate(0deg); }
+  to   { opacity: 0;   transform: scale(0.55) rotate(-24deg); }
 }
+@keyframes resolve {
+  from { opacity: 0; filter: blur(6px); transform: scale(0.97); }
+  60%  { opacity: 1; filter: blur(0);   transform: scale(1.008); }
+  to   { opacity: 1; filter: blur(0);   transform: scale(1); }
+}
+@keyframes turn {
+  to { transform: rotate(360deg); }
+}
+
+.rise    { animation: rise 420ms cubic-bezier(0.22, 0.8, 0.28, 1) both; }
+.collapse{ animation: collapse 620ms cubic-bezier(0.5, 0, 0.75, 0) both; }
+.resolve { animation: resolve 620ms cubic-bezier(0.16, 0.9, 0.3, 1) 120ms both; }
+
+/* Page-load stagger. Applied to the immediate children of a screen so the
+   instrument comes up in order rather than all at once. */
+.stagger > * { animation: rise 420ms cubic-bezier(0.22, 0.8, 0.28, 1) both; }
+.stagger > *:nth-child(1) { animation-delay: 0ms; }
+.stagger > *:nth-child(2) { animation-delay: 60ms; }
+.stagger > *:nth-child(3) { animation-delay: 120ms; }
+.stagger > *:nth-child(4) { animation-delay: 180ms; }
+.stagger > *:nth-child(5) { animation-delay: 240ms; }
 
 @media (prefers-reduced-motion: reduce) {
-  .struck { animation: none; }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+
+::selection {
+  background: var(--color-ink);
+  color: var(--color-field);
 }
 
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 2px solid var(--color-carmine);
-  outline-offset: 2px;
+  outline: 2px solid var(--color-ink);
+  outline-offset: 3px;
+}
+
+input::placeholder {
+  color: var(--color-slate);
+  opacity: 0.45;
 }

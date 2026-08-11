@@ -1,119 +1,149 @@
 import { useState } from "react";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ConnectButton, useConnectModal } from "@rainbow-me/rainbowkit";
 import { useAccount, useChainId } from "wagmi";
 import { sepolia } from "@/config/wagmi";
 import { contracts, missingContractEnv } from "@/config/contracts";
-import { Hero } from "@/components/Hero";
-import { PoolLedger } from "@/components/PoolLedger";
-import { DepositFlow } from "@/components/DepositFlow";
-import { Position } from "@/components/Position";
-import { Round } from "@/components/Round";
-import { Notice, Panel, Serial } from "@/components/ui";
-import { usePoolMembers } from "@/hooks/usePoolMembers";
+import { Arrival } from "@/components/Arrival";
+import { Setup } from "@/components/Setup";
+import { Account } from "@/components/Account";
+import { BusyOverlay } from "@/components/BusyOverlay";
+import { ResultModal } from "@/components/ResultModal";
+import { NoticeBar } from "@/components/ui";
+import { useSetup, type SetupStep } from "@/hooks/useSetup";
+import { useShell } from "@/lib/shell";
 import { shortAddress } from "@/lib/format";
 
 export default function App() {
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
   const chainId = useChainId();
-  const [nonce, setNonce] = useState(0);
-  const refresh = () => setNonce((n) => n + 1);
+  const setup = useSetup();
+  const { openConnectModal } = useConnectModal();
+  const { busy, notice, result, dismissNotice, closeResult } = useShell();
 
-  const { members } = usePoolMembers(nonce);
+  const [nonce, setNonce] = useState(0);
+  /// Set when a saver who is already set up asks to add more. Nothing else
+  /// overrides the flow — the rest is derived from what is on-chain, so the app
+  /// cannot show a step that has already been completed.
+  const [topUp, setTopUp] = useState(false);
+
   const wrongNetwork = isConnected && chainId !== sepolia.id;
-  const ready = isConnected && !!contracts && !wrongNetwork;
+  const configured = !!contracts;
+
+  const screen: "arrival" | "setup" | "account" = !isConnected
+    ? "arrival"
+    : topUp || !setup.complete
+      ? "setup"
+      : "account";
+
+  const step: SetupStep = topUp ? "deposit" : setup.autoStep;
 
   return (
-    <div className="mx-auto max-w-3xl px-5 pb-16 sm:px-8">
-      <header className="flex flex-wrap items-center justify-between gap-4 py-6">
-        <div>
-          <h1 className="display text-2xl leading-none font-semibold">
-            Pool<span className="text-bank">2</span>geda
-          </h1>
-          <p className="serif-caps mt-1.5 text-[9px] text-faint">
-            Confidential prize savings · Sepolia
-          </p>
-        </div>
-        <ConnectButton showBalance={false} chainStatus="icon" />
+    <div className="min-h-screen">
+      <header className="mx-auto flex max-w-[1100px] items-center gap-6 px-7 pt-8 pb-14">
+        <span className="wide mr-auto text-[19px] font-bold">
+          Pool<span className="text-brass-deep">2</span>geda
+        </span>
+        <span className="label hidden text-slate sm:block">Sepolia</span>
+        <ConnectButton.Custom>
+          {({ openConnectModal: open, openAccountModal, mounted }) => (
+            <button
+              type="button"
+              onClick={isConnected ? openAccountModal : open}
+              disabled={!mounted}
+              className={
+                "wide cursor-pointer rounded-[3px] px-4 py-2.5 text-[13px] font-semibold transition-colors " +
+                (isConnected
+                  ? "bg-transparent text-ink ring-1 ring-inset ring-line hover:ring-ink"
+                  : "bg-ink text-field hover:bg-slate")
+              }
+            >
+              {isConnected && address ? shortAddress(address) : "Connect a wallet"}
+            </button>
+          )}
+        </ConnectButton.Custom>
       </header>
 
-      <div className="space-y-4">
-        {!contracts && (
-          <Notice kind="error">
-            <p className="font-medium">Contract addresses are not set.</p>
-            <p className="mt-1">
-              Missing {missingContractEnv.join(", ")}. Copy{" "}
-              <code className="bg-ink/8 px-1">web/.env.example</code> to{" "}
-              <code className="bg-ink/8 px-1">web/.env</code>, or run the deploy
-              script, which fills it in.
-            </p>
-          </Notice>
-        )}
+      <main className="mx-auto max-w-[1100px] px-7 pb-24">
+        {notice && <NoticeBar notice={notice} onDismiss={dismissNotice} />}
 
-        {contracts && <Hero memberCount={members?.length ?? null} />}
+        {!configured && (
+          <NoticeBar
+            notice={{
+              tone: "bad",
+              title: "No deployment behind this build",
+              body: `Missing ${missingContractEnv.join(", ")}. Copy web/.env.example to web/.env, or run the deploy script, which fills it in.`,
+            }}
+          />
+        )}
 
         {wrongNetwork && (
-          <Notice kind="error">
-            Wrong network. Switch to Sepolia — the encryption protocol only runs
-            there.
-          </Notice>
+          <NoticeBar
+            notice={{
+              tone: "bad",
+              title: "Wrong network",
+              body: "This runs on Sepolia — the encryption protocol is not deployed anywhere else. Switch your wallet across and the app opens up.",
+            }}
+          />
         )}
 
-        {contracts && !isConnected && (
-          <Panel caption="To subscribe">
-            <p className="max-w-lg text-[13.5px] leading-[1.7] text-ink/75">
-              Connect a wallet on Sepolia. You will need a little Sepolia ETH
-              for gas; the pool&rsquo;s own tokens are issued free by the
-              faucet. Nothing you deposit is legible to anyone once it enters.
-            </p>
-          </Panel>
-        )}
-
-        {ready && (
+        {configured && !wrongNetwork && (
           <>
-            <PoolLedger refreshKey={nonce} />
-            <DepositFlow onDone={refresh} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Position onDone={refresh} />
-              <Round onDone={refresh} />
-            </div>
+            {screen === "arrival" && (
+              <Arrival onConnect={() => openConnectModal?.()} />
+            )}
+
+            {screen === "setup" && (
+              <Setup
+                setup={setup}
+                step={step}
+                onCancel={topUp ? () => setTopUp(false) : undefined}
+                onDeposited={() => {
+                  setTopUp(false);
+                  setNonce((n) => n + 1);
+                }}
+              />
+            )}
+
+            {screen === "account" && (
+              <Account
+                refreshKey={nonce}
+                onTopUp={() => setTopUp(true)}
+                onChanged={() => setNonce((n) => n + 1)}
+              />
+            )}
           </>
         )}
-      </div>
+      </main>
 
-      <footer className="mt-10">
-        <div className="rule-double pt-5">
-          <h2 className="serif-caps text-[10px] text-bank">
-            Terms of disclosure
-          </h2>
-          <div className="mt-3 grid gap-x-8 gap-y-4 text-[11.5px] leading-[1.65] text-ink/70 sm:grid-cols-2">
-            <p>
-              <span className="serif-caps text-[9px] text-carmine">Sealed </span>
-              Every deposit, balance, and prize, and the identity of each winner
-              — concealed from all parties including the contract that pays.
-              Odds follow stake multiplied by time held, so a large sum entered
-              moments before a draw earns very little.
-            </p>
-            <p>
-              <span className="serif-caps text-[9px] text-ink">Disclosed </span>
-              The pool&rsquo;s combined total each round, the draw randomness
-              once a round closes, the addresses on the register, the prize, and
-              any sum entering or leaving the sealed balance. The randomness and
-              the total together still disclose nothing of any single holder.
-            </p>
+      {contracts && (
+        <footer className="mx-auto max-w-[1100px] px-7 pb-14">
+          <div className="flex flex-wrap items-center gap-x-10 gap-y-2 border-t border-line pt-5">
+            <Serial label="Pool" value={contracts.prizePool} />
+            <Serial label="Private token" value={contracts.confidentialUsd} />
+            <Serial label="Asset" value={contracts.testUsd} />
+            <span className="data ml-auto text-slate">Chain 11155111</span>
           </div>
-        </div>
+        </footer>
+      )}
 
-        {contracts && (
-          <div className="mt-6 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-ink/10 pt-3">
-            <Serial label="POOL" value={shortAddress(contracts.prizePool)} />
-            <Serial label="NOTE" value={shortAddress(contracts.confidentialUsd)} />
-            <Serial label="ASSET" value={shortAddress(contracts.testUsd)} />
-            <span className="ml-auto font-mono text-[9px] tracking-wider text-faint/60">
-              SEPOLIA · CHAIN 11155111
-            </span>
-          </div>
-        )}
-      </footer>
+      {busy && <BusyOverlay kind={busy.kind} startedAt={busy.startedAt} />}
+      {result && <ResultModal result={result} onClose={closeResult} />}
     </div>
+  );
+}
+
+/// The real addresses in use, printed the way an instrument carries its plate
+/// marks. Verifiable, not decorative.
+function Serial({ label, value }: { label: string; value: string }) {
+  return (
+    <a
+      href={`https://sepolia.etherscan.io/address/${value}`}
+      target="_blank"
+      rel="noreferrer"
+      className="data text-slate transition-colors hover:text-ink"
+    >
+      <span className="label mr-2 text-slate">{label}</span>
+      {shortAddress(value)}
+    </a>
   );
 }

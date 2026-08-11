@@ -11,13 +11,11 @@ import type { Address } from "viem";
 const PATTERN = /^0x[0-9a-fA-F]{40}$/;
 
 const RAW = {
-  testUsd: import.meta.env.VITE_TEST_USD_ADDRESS,
   confidentialUsd: import.meta.env.VITE_CONFIDENTIAL_USD_ADDRESS,
   prizePool: import.meta.env.VITE_PRIZE_POOL_ADDRESS,
 } as const;
 
 const ENV_NAMES: Record<keyof typeof RAW, string> = {
-  testUsd: "VITE_TEST_USD_ADDRESS",
   confidentialUsd: "VITE_CONFIDENTIAL_USD_ADDRESS",
   prizePool: "VITE_PRIZE_POOL_ADDRESS",
 };
@@ -32,7 +30,7 @@ export const missingContractEnv: string[] = (
 export const contracts: Contracts | null =
   missingContractEnv.length === 0 ? (RAW as unknown as Contracts) : null;
 
-/// cUSD and tUSD both use 6 decimals (the ERC-7984 wrapper caps at 6).
+/// cUSD uses 6 decimals, inherited from the ERC-7984 base.
 export const DECIMALS = 6;
 
 /// Operator grants are what let the pool pull cUSD on deposit. Far-future so a

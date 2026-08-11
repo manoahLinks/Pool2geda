@@ -29,16 +29,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
   log(`Deploying to ${network.name} from ${deployer}`);
 
-  const testUsd = await deploy("TestUSD", {
-    from: deployer,
-    args: [deployer],
-    log: true,
-    waitConfirmations: network.name === "hardhat" ? 1 : 2,
-  });
-
+  // Confidential from birth — no ERC-20 underneath, so no per-user amount is
+  // ever published. The ERC-20 wrapper path lives in contracts/alt and stays
+  // deployed from an earlier run; the pool does not depend on it.
   const confidentialUsd = await deploy("ConfidentialUSD", {
     from: deployer,
-    args: [testUsd.address],
+    args: [],
     log: true,
     waitConfirmations: network.name === "hardhat" ? 1 : 2,
   });
@@ -75,7 +71,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   }
 
   log("");
-  log(`TestUSD               ${testUsd.address}`);
   log(`ConfidentialUSD       ${confidentialUsd.address}`);
   log(`ConfidentialPrizePool ${prizePool.address}`);
   log(`StreamingYieldSource  ${yieldSource.address}`);
@@ -117,7 +112,6 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     (await ethers.provider.getBlockNumber());
 
   const next: Record<string, string> = {
-    VITE_TEST_USD_ADDRESS: testUsd.address,
     VITE_CONFIDENTIAL_USD_ADDRESS: confidentialUsd.address,
     VITE_PRIZE_POOL_ADDRESS: prizePool.address,
     VITE_DEPLOY_BLOCK: String(deployBlock),

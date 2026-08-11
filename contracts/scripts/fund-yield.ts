@@ -33,11 +33,9 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const me = await signer.getAddress();
 
-  const usdD = await deployments.get("TestUSD");
   const cusdD = await deployments.get("ConfidentialUSD");
   const srcD = await deployments.get("StreamingYieldSource");
 
-  const usd = await ethers.getContractAt("TestUSD", usdD.address);
   const cusd = await ethers.getContractAt("ConfidentialUSD", cusdD.address);
   const src = await ethers.getContractAt("StreamingYieldSource", srcD.address);
 
@@ -53,35 +51,26 @@ async function main() {
     return await fhevm.userDecryptEuint(FhevmType.euint64, h, cusdD.address, signer);
   }
 
-  // --- get the underlying, if short -------------------------------------
+  // --- claim until we hold enough ---------------------------------------
+  //
+  // No approve, no wrap: the token is confidential from birth, so funding is
+  // just repeated faucet claims. The faucet is throttled, so a large target may
+  // need several runs an hour apart.
   let held = await myCusd();
-  if (held < amount) {
-    const shortfall = amount - held;
-    info(`hold ${held} cUSD, need ${shortfall} more`);
-
-    let plain = await usd.balanceOf(me);
-    while (plain < shortfall) {
-      const nextAt = await usd.nextFaucetAt(me);
-      if (nextAt > 0n) {
-        throw new Error(
-          `Need ${shortfall - plain} more tUSD but the faucet is on cooldown ` +
-            `until ${new Date(Number(nextAt) * 1000).toISOString()}. ` +
-            `Re-run later, or lower the amount with FUND=<whole tokens>.`
-        );
-      }
-      info("claiming 1,000 tUSD from the faucet");
-      await (await usd.faucet()).wait();
-      plain = await usd.balanceOf(me);
+  while (held < amount) {
+    const nextAt = await cusd.nextFaucetAt(me);
+    if (nextAt > 0n) {
+      throw new Error(
+        `Hold ${held}, need ${amount}, but the faucet is on cooldown until ` +
+          `${new Date(Number(nextAt) * 1000).toISOString()}. Re-run later, or ` +
+          `lower the target with FUND=<whole tokens>.`
+      );
     }
-
-    info(`wrapping ${shortfall} tUSD -> cUSD`);
-    await (await usd.approve(cusdD.address, shortfall)).wait();
-    await (await cusd.wrap(me, shortfall)).wait();
+    info(`hold ${held} cUSD — claiming 1,000 more`);
+    await (await cusd.faucet()).wait();
     held = await myCusd();
-    ok(`now hold ${held} cUSD`);
-  } else {
-    ok(`already hold ${held} cUSD`);
   }
+  ok(`hold ${held} cUSD`);
 
   // --- let the source pull ----------------------------------------------
   if (!(await cusd.isOperator(me, srcD.address))) {

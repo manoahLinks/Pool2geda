@@ -103,22 +103,17 @@ export function describeError(err: unknown): ErrorNote {
   if (m.includes("faucetcooldownactive"))
     return {
       title: "You already collected",
-      body: "The tap gives 1,000 test USD once an hour. Try again a little later.",
+      body: "The faucet mints 1,000 cUSD once an hour. Try again a little later.",
     };
   if (m.includes("erc7984unauthorizeduseofencryptedamount"))
     return {
       title: "The pool needs permission",
       body: "Give the pool permission to work with your private balance, then try again. It still cannot see or move your money.",
     };
-  if (m.includes("erc20insufficientallowance") || m.includes("allowance"))
+  if (m.includes("erc7984insufficientbalance") || m.includes("insufficient"))
     return {
-      title: "One more approval",
-      body: "Approve the amount first, then make it private.",
-    };
-  if (m.includes("erc20insufficientbalance"))
-    return {
-      title: "Not enough test money",
-      body: "Collect from the tap first, then try again.",
+      title: "Not enough cUSD",
+      body: "Claim from the faucet first, then try again.",
     };
 
   return { title: "That did not go through", body: raw || "Something went wrong. Nothing has changed — try again." };

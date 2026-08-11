@@ -55,6 +55,7 @@ export default function App() {
   });
 
   const shares = useSecret(sharesHandle as Hex | undefined, c?.prizePool ?? "0x");
+  const walletBalance = useSecret(setup.balanceHandle, c?.confidentialUsd ?? "0x");
   const winnings = useSecret(winningsHandle as Hex | undefined, c?.prizePool ?? "0x");
 
   /// Decrypt winnings and say what it means. A positive figure after a check is
@@ -201,6 +202,7 @@ export default function App() {
                 winningsHandle={winningsHandle as Hex | undefined}
                 onChanged={bump}
                 onOpen={setAction}
+                walletBalance={walletBalance}
               />
             )}
           </>

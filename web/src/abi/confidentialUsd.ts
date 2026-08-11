@@ -3,13 +3,7 @@
 
 export const confidentialUsdAbi = [
   {
-    "inputs": [
-      {
-        "internalType": "contract IERC20",
-        "name": "underlying_",
-        "type": "address"
-      }
-    ],
+    "inputs": [],
     "stateMutability": "nonpayable",
     "type": "constructor"
   },
@@ -33,11 +27,6 @@ export const confidentialUsdAbi = [
       }
     ],
     "name": "ERC7984InvalidSender",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "ERC7984TotalSupplyOverflow",
     "type": "error"
   },
   {
@@ -84,46 +73,19 @@ export const confidentialUsdAbi = [
     "type": "error"
   },
   {
-    "inputs": [],
-    "name": "InvalidKMSSignatures",
-    "type": "error"
-  },
-  {
     "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "InvalidUnwrapRequest",
-    "type": "error"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "uint8",
-        "name": "bits",
-        "type": "uint8"
-      },
       {
         "internalType": "uint256",
-        "name": "value",
+        "name": "availableAt",
         "type": "uint256"
       }
     ],
-    "name": "SafeCastOverflowedUintDowncast",
+    "name": "FaucetCooldownActive",
     "type": "error"
   },
   {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "token",
-        "type": "address"
-      }
-    ],
-    "name": "SafeERC20FailedOperation",
+    "inputs": [],
+    "name": "InvalidKMSSignatures",
     "type": "error"
   },
   {
@@ -216,6 +178,19 @@ export const confidentialUsdAbi = [
       {
         "indexed": true,
         "internalType": "address",
+        "name": "user",
+        "type": "address"
+      }
+    ],
+    "name": "FaucetClaimed",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
         "name": "holder",
         "type": "address"
       },
@@ -255,60 +230,30 @@ export const confidentialUsdAbi = [
     "type": "event"
   },
   {
-    "anonymous": false,
-    "inputs": [
+    "inputs": [],
+    "name": "FAUCET_AMOUNT",
+    "outputs": [
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "receiver",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "euint64",
-        "name": "encryptedAmount",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
         "internalType": "uint64",
-        "name": "cleartextAmount",
+        "name": "",
         "type": "uint64"
       }
     ],
-    "name": "UnwrapFinalized",
-    "type": "event"
+    "stateMutability": "view",
+    "type": "function"
   },
   {
-    "anonymous": false,
-    "inputs": [
+    "inputs": [],
+    "name": "FAUCET_COOLDOWN",
+    "outputs": [
       {
-        "indexed": true,
-        "internalType": "address",
-        "name": "receiver",
-        "type": "address"
-      },
-      {
-        "indexed": true,
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      },
-      {
-        "indexed": false,
-        "internalType": "euint64",
-        "name": "amount",
-        "type": "bytes32"
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
-    "name": "UnwrapRequested",
-    "type": "event"
+    "stateMutability": "view",
+    "type": "function"
   },
   {
     "inputs": [
@@ -657,39 +602,10 @@ export const confidentialUsdAbi = [
     "type": "function"
   },
   {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "uint64",
-        "name": "unwrapAmountCleartext",
-        "type": "uint64"
-      },
-      {
-        "internalType": "bytes",
-        "name": "decryptionProof",
-        "type": "bytes"
-      }
-    ],
-    "name": "finalizeUnwrap",
+    "inputs": [],
+    "name": "faucet",
     "outputs": [],
     "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "inferredTotalSupply",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -717,8 +633,14 @@ export const confidentialUsdAbi = [
     "type": "function"
   },
   {
-    "inputs": [],
-    "name": "maxTotalSupply",
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "name": "lastClaimedAt",
     "outputs": [
       {
         "internalType": "uint256",
@@ -746,39 +668,11 @@ export const confidentialUsdAbi = [
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "user",
         "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      },
-      {
-        "internalType": "bytes",
-        "name": "data",
-        "type": "bytes"
       }
     ],
-    "name": "onTransferReceived",
-    "outputs": [
-      {
-        "internalType": "bytes4",
-        "name": "",
-        "type": "bytes4"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "rate",
+    "name": "nextFaucetAt",
     "outputs": [
       {
         "internalType": "uint256",
@@ -850,144 +744,6 @@ export const confidentialUsdAbi = [
       }
     ],
     "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "underlying",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "internalType": "externalEuint64",
-        "name": "encryptedAmount",
-        "type": "bytes32"
-      },
-      {
-        "internalType": "bytes",
-        "name": "inputProof",
-        "type": "bytes"
-      }
-    ],
-    "name": "unwrap",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "from",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "internalType": "euint64",
-        "name": "amount",
-        "type": "bytes32"
-      }
-    ],
-    "name": "unwrap",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "unwrapAmount",
-    "outputs": [
-      {
-        "internalType": "euint64",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "bytes32",
-        "name": "unwrapRequestId",
-        "type": "bytes32"
-      }
-    ],
-    "name": "unwrapRequester",
-    "outputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "to",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "amount",
-        "type": "uint256"
-      }
-    ],
-    "name": "wrap",
-    "outputs": [
-      {
-        "internalType": "euint64",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "nonpayable",
     "type": "function"
   }
 ] as const;

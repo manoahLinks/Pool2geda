@@ -6,16 +6,14 @@ import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 const EPOCH = 24 * 3600; // 1 day
 const PRIZE = 10_000_000n; // 10 cUSD (6 decimals)
+const FAUCET = 1_000_000_000n; // ConfidentialUSD.FAUCET_AMOUNT — 1,000 cUSD
 const FAR_FUTURE = Math.floor(Date.now() / 1000) + 100 * 365 * 24 * 3600;
 
 async function deployFixture() {
   const signers = await ethers.getSigners();
   const [deployer] = signers;
 
-  const usd = await (await ethers.getContractFactory("TestUSD")).deploy(deployer.address);
-  const usdAddr = await usd.getAddress();
-
-  const cusd = await (await ethers.getContractFactory("ConfidentialUSD")).deploy(usdAddr);
+  const cusd = await (await ethers.getContractFactory("ConfidentialUSD")).deploy();
   const cusdAddr = await cusd.getAddress();
 
   const pool = await (
@@ -23,20 +21,30 @@ async function deployFixture() {
   ).deploy(cusdAddr, EPOCH, PRIZE, deployer.address);
   const poolAddr = await pool.getAddress();
 
-  return { usd, usdAddr, cusd, cusdAddr, pool, poolAddr, signers, deployer };
+  return { cusd, cusdAddr, pool, poolAddr, signers, deployer };
 }
 
-/// Mint -> approve -> wrap -> grant the pool operator rights.
+/// Claim from the confidential faucet until `who` holds at least `amount`,
+/// then let the pool move their tokens.
+///
+/// No mint/approve/wrap: cUSD is confidential from birth, so funding is a
+/// single permissionless call and no per-user amount is ever published.
 async function fund(
   ctx: Awaited<ReturnType<typeof deployFixture>>,
   who: HardhatEthersSigner,
   amount: bigint
 ) {
-  const { usd, cusd, cusdAddr, poolAddr, deployer } = ctx;
-  await usd.connect(deployer).mintTo(who.address, amount);
-  await usd.connect(who).approve(cusdAddr, amount);
-  await cusd.connect(who).wrap(who.address, amount);
+  const { cusd, poolAddr } = ctx;
+  const claims = amount / FAUCET + (amount % FAUCET ? 1n : 0n);
+  for (let i = 0n; i < claims; i++) {
+    if (i > 0n) await time.increase(3601); // faucet cooldown
+    await cusd.connect(who).faucet();
+  }
   await cusd.connect(who).setOperator(poolAddr, FAR_FUTURE);
+  // The faucet mints a fixed amount, so the holder ends up with at least what
+  // was asked for and usually more. Return the real figure rather than letting
+  // callers assume.
+  return claims * FAUCET;
 }
 
 async function encrypted(
@@ -114,7 +122,7 @@ describe("ConfidentialPrizePool", function () {
     it("returns full principal on withdraw — no loss", async function () {
       const ctx = await deployFixture();
       const alice = ctx.signers[1];
-      await fund(ctx, alice, 100_000_000n);
+      const funded = await fund(ctx, alice, 100_000_000n);
       await deposit(ctx, alice, 40_000_000n);
 
       const e = await encrypted(ctx.poolAddr, alice, 40_000_000n);
@@ -123,7 +131,7 @@ describe("ConfidentialPrizePool", function () {
       expect(await decryptFor(await ctx.pool.sharesOf(alice.address), ctx.poolAddr, alice)).to.equal(0n);
 
       const bal = await ctx.cusd.confidentialBalanceOf(alice.address);
-      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(100_000_000n);
+      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(funded);
     });
 
     it("withdrawing more than balance moves zero and does not corrupt shares", async function () {
@@ -132,7 +140,7 @@ describe("ConfidentialPrizePool", function () {
       // would underflow and wrap to a huge number.
       const ctx = await deployFixture();
       const alice = ctx.signers[1];
-      await fund(ctx, alice, 100_000_000n);
+      const funded = await fund(ctx, alice, 100_000_000n);
       await deposit(ctx, alice, 10_000_000n);
 
       const e = await encrypted(ctx.poolAddr, alice, 999_000_000n);
@@ -142,7 +150,7 @@ describe("ConfidentialPrizePool", function () {
       // and shares land on 0 rather than wrapping.
       expect(await decryptFor(await ctx.pool.sharesOf(alice.address), ctx.poolAddr, alice)).to.equal(0n);
       const bal = await ctx.cusd.confidentialBalanceOf(alice.address);
-      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(100_000_000n);
+      expect(await decryptFor(bal, ctx.cusdAddr, alice)).to.equal(funded);
     });
 
     it("keeps withdrawals open while a draw is live", async function () {
@@ -485,7 +493,7 @@ describe("ConfidentialPrizePool", function () {
       // arrived, and eventually pay a prize out of principal.
       const ctx = await deployFixture();
       const alice = ctx.signers[1];
-      await fund(ctx, alice, 100_000_000n);
+      const funded = await fund(ctx, alice, 100_000_000n);
       await deposit(ctx, alice, 50_000_000n);
 
       const short = PRIZE / 4n;
@@ -508,7 +516,7 @@ describe("ConfidentialPrizePool", function () {
       await ctx.pool.connect(alice).withdraw(e.handle, e.proof);
       expect(
         await decryptFor(await ctx.cusd.confidentialBalanceOf(alice.address), ctx.cusdAddr, alice)
-      ).to.equal(100_000_000n);
+      ).to.equal(funded);
     });
 
     it("is optional — an unset source leaves the pool working as before", async function () {

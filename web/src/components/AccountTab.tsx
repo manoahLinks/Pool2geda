@@ -24,6 +24,7 @@ export function AccountTab({
   winningsHandle,
   onChanged,
   onOpen,
+  walletBalance,
 }: {
   setup: ReturnType<typeof useSetup>;
   shares: Secret;
@@ -32,6 +33,8 @@ export function AccountTab({
   winningsHandle?: Hex;
   onChanged: () => void;
   onOpen: (a: Action) => void;
+  /// The wallet's own confidential balance — what a deposit is drawn from.
+  walletBalance: Secret;
 }) {
   const c = contracts!;
   const { run, notify } = useShell();
@@ -87,6 +90,22 @@ export function AccountTab({
             : "Deposit to join the draw. Your balance is encrypted the moment it lands, and your odds start counting from that second."}
         </p>
 
+        {/* What is in the wallet, as opposed to in the pool. Encrypted too, so
+            it needs the same decrypt affordance. */}
+        {setup.hasTokens && (
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-4 rounded-ctl border border-line bg-bg px-4 py-3.5">
+            <span className="text-[13px] font-bold text-muted">
+              In your wallet
+            </span>
+            <Value
+              handle={setup.balanceHandle}
+              secret={walletBalance}
+              label="your wallet balance"
+              size="sm"
+            />
+          </div>
+        )}
+
         <div className="mt-6 flex flex-wrap gap-3">
           <Button size="lg" onClick={() => onOpen("deposit")} disabled={!setup.complete}>
             Deposit
@@ -102,7 +121,7 @@ export function AccountTab({
         </div>
         {!setup.complete && (
           <p className="m-0 mt-3 text-[13px] text-muted">
-            Finish the three steps above to deposit.
+            Finish the two steps above to deposit.
           </p>
         )}
       </Card>

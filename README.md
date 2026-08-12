@@ -360,7 +360,11 @@ The Zama SDK is loaded on demand rather than at page load, cutting the eager dow
 
 ### Known limitations
 
-- **One-round claim window.** A prize must be checked during the following round — the cost of bounding TWAB to O(1). Mirrors v5's `ClaimPeriodExpired`.
+- **One-round claim window.** A prize must be checked during the following round — the cost of bounding TWAB to O(1). v5 has the identical constraint (`ClaimPeriodExpired`, claimable only for `_lastAwardedDrawId`), but its draws are daily, so a day-wide window hides it. At a 15-minute round it does not hide: with the keeper closing punctually, a saver has ~14 minutes to check before the round rolls and the prize is unreachable. The app shows a countdown for exactly this reason.
+
+  Note what does **not** expire: `claim()` has no deadline at all. Once a prize is credited to `_winnings`, it stays there indefinitely and can be decrypted and withdrawn whenever. Only the act of *determining* whether you won is time-boxed, because `_cumPrev` holds one round of history and is overwritten on the next roll-forward.
+
+  Raising `epochDuration` widens the window one-for-one and is a single constructor argument; 15 minutes is kept deliberately so a judge sees a complete draw cycle without waiting.
 - **Single prize tier.** v5's `4**tier` structure and `SD59x18` odds curves are not ported.
 - **Prize solvency under many winners.** The winner count is Poisson(1); the reserve should be funded for ~5. Beyond that, `checkPrize` correctly declines to credit rather than crediting an unpayable win.
 - **Mock yield**, for the reasons documented above.

@@ -155,6 +155,21 @@ export function PoolTab({
             <p className="m-0 mt-3 max-w-[54ch] text-[14px] leading-relaxed text-muted">
               {r.body}
             </p>
+            {/* The claim window is one round wide — a constraint inherited from
+                PoolTogether v5, where a day-long draw hides it. At fifteen
+                minutes it does not hide, so it is stated rather than sprung.
+                Only shown while checking is still possible: once checked, the
+                prize is credited permanently and `claim` has no deadline. */}
+            {pool.phase === "settled" && pool.remaining !== null && (
+              <div className="mt-4 flex flex-wrap items-center gap-2.5">
+                <Badge tone={pool.remaining < 180 ? "danger" : "accent"}>
+                  Check within {formatDuration(pool.remaining)}
+                </Badge>
+                <span className="text-[13px] text-muted">
+                  after that the round rolls and this prize is gone
+                </span>
+              </div>
+            )}
             {/* What this round actually pays. Accrues with the clock, so it is
                 smaller early on — the ceiling sits beside it for context. */}
             <div className="mt-5 flex items-baseline gap-2.5">
@@ -294,7 +309,7 @@ function roundCopy(
         status: "Draw complete",
         tone: "mint",
         metric: `Round ${prev} settled`,
-        body: "Find out whether the prize came to you. Winning and losing cost the same gas and look identical onchain, so checking tells nobody anything — including whoever is watching this transaction.",
+        body: "Find out whether the prize came to you. Winning and losing cost the same gas and look identical onchain, so checking tells nobody anything. You have until this round closes — the pool only remembers one round of history per saver, which is what keeps the draw cheap at any size.",
         cta: "Check my result",
       };
     case "checked":

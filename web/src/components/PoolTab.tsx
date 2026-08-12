@@ -31,7 +31,7 @@ export function PoolTab({
   refreshKey: number;
   onChanged: () => void | Promise<void>;
   shares: Secret;
-  onOpenResult: () => void;
+  onOpenResult: () => void | Promise<void>;
 }) {
   const c = contracts!;
   const { address } = useAccount();
@@ -88,6 +88,12 @@ export function PoolTab({
     }
   }
 
+  /// Check, then immediately show the answer.
+  ///
+  /// These were two buttons — "Check my result", then "Reveal result" — which
+  /// asked the user to press twice for a single question. The transaction and
+  /// the decryption are separate on-chain events but they are one intention, so
+  /// the second follows the first automatically.
   async function check() {
     if (pool.last === null) return;
     const ok = await run("tx", () =>
@@ -98,23 +104,38 @@ export function PoolTab({
         args: [pool.last],
       })
     );
-    if (ok) {
-      await pool.refetchAll();
-      onChanged();
-    }
+    if (!ok) return;
+    await pool.refetchAll();
+    await onChanged();
+    await onOpenResult();
   }
 
   const r = roundCopy(pool.phase, pool.last, pool.remaining);
+
+  // Only the two actions that are genuinely the user's get a primary button.
+  //
+  // `checkPrize` credits `msg.sender`, so a keeper running it would credit
+  // itself — it cannot be automated, and it is the user's own. Revealing needs
+  // their key. Closing and settling are neither: they are plumbing, a keeper
+  // runs them on a schedule, and putting them in front of a saver as a demand
+  // makes the product look like it needs operating.
   const act =
+    pool.phase === "settled"
+      ? check
+      : pool.phase === "checked"
+        ? onOpenResult
+        : null;
+
+  // Still reachable, deliberately. Anyone being able to close and settle is a
+  // trust property — nobody can withhold a draw — and hiding it entirely would
+  // throw that argument away. So it stays, as a quiet secondary control rather
+  // than the thing the page is asking for.
+  const manual =
     pool.phase === "timeup"
-      ? closeRound
+      ? { label: "Close it yourself", fn: closeRound }
       : pool.phase === "closed"
-        ? settle
-        : pool.phase === "settled"
-          ? check
-          : pool.phase === "checked"
-            ? onOpenResult
-            : null;
+        ? { label: "Settle it yourself", fn: settle }
+        : null;
 
   return (
     <div className="stagger space-y-5">
@@ -158,6 +179,15 @@ export function PoolTab({
               <Button size="lg" onClick={act}>
                 {r.cta}
               </Button>
+            )}
+            {manual && (
+              <button
+                type="button"
+                onClick={manual.fn}
+                className="cursor-pointer text-[13px] font-bold text-muted underline underline-offset-4 transition-colors hover:text-text"
+              >
+                {manual.label}
+              </button>
             )}
           </div>
         </div>
@@ -253,18 +283,18 @@ function roundCopy(
       };
     case "closed":
       return {
-        status: "Needs settling",
+        status: "Settling",
         tone: "accent",
         metric: `Round ${prev} closed`,
-        body: "Its two public figures need decrypting and proving back to the contract before anyone can check. Open to anyone, and it reveals nothing about any individual.",
-        cta: "Settle round",
+        body: "Its two public figures are being decrypted and proved back to the contract. This step is open to anyone and reveals nothing about any individual.",
+        cta: "",
       };
     case "settled":
       return {
         status: "Draw complete",
         tone: "mint",
         metric: `Round ${prev} settled`,
-        body: "Find out whether the prize came to you. Winning and losing cost the same gas and look identical onchain, so checking tells nobody anything.",
+        body: "Find out whether the prize came to you. Winning and losing cost the same gas and look identical onchain, so checking tells nobody anything — including whoever is watching this transaction.",
         cta: "Check my result",
       };
     case "checked":

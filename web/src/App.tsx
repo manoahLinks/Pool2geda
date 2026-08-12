@@ -206,10 +206,7 @@ export default function App() {
                 refreshKey={nonce}
                 onChanged={bump}
                 shares={shares}
-                onOpenResult={() => {
-                  setTab("account");
-                  void revealResult();
-                }}
+                onOpenResult={revealResult}
               />
             )}
 

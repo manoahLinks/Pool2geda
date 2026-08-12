@@ -23,14 +23,20 @@ import "solidity-coverage";
 const TEST_MNEMONIC =
   "test test test test test test test test test test test junk";
 
+// CI has no interactive `hardhat vars` store, so a plain environment variable
+// wins when one is present. This is how the keeper workflow injects its key —
+// and it must be a burner, because the repository is public and the deployer
+// key owns the contracts.
 const MNEMONIC: string = vars.get("MNEMONIC", TEST_MNEMONIC);
-const PRIVATE_KEY_RAW: string = vars.get("PRIVATE_KEY", "");
+const PRIVATE_KEY_RAW: string =
+  process.env.PRIVATE_KEY ?? vars.get("PRIVATE_KEY", "");
 const PRIVATE_KEY: string = PRIVATE_KEY_RAW
   ? PRIVATE_KEY_RAW.startsWith("0x")
     ? PRIVATE_KEY_RAW
     : `0x${PRIVATE_KEY_RAW}`
   : "";
-const ALCHEMY_API_KEY_SEPOLIA: string = vars.get("ALCHEMY_API_KEY_SEPOLIA", "");
+const ALCHEMY_API_KEY_SEPOLIA: string =
+  process.env.ALCHEMY_API_KEY_SEPOLIA ?? vars.get("ALCHEMY_API_KEY_SEPOLIA", "");
 const INFURA_API_KEY: string = vars.get(
   "INFURA_API_KEY",
   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"

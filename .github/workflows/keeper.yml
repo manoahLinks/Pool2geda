@@ -1,0 +1,63 @@
+name: Keeper
+
+# Keeps the prize pool's rounds turning.
+#
+# Every round transition is permissionless by design, so this workflow has no
+# privileged access — it does exactly what any visitor could do from the app,
+# it just does it reliably at 3am. Nothing here can touch a depositor's funds:
+# `closeEpoch` and `awardDraw` are the only calls, and neither can move a
+# balance.
+#
+# WHY IT LOOPS RATHER THAN FIRING MORE OFTEN
+#
+# Rounds are 15 minutes, and `closeEpoch` mints no draw for a period it crosses
+# as dead time — so a close that arrives a full period late costs a round.
+# GitHub's scheduler is only approximately punctual and can run 10+ minutes
+# behind under load, which would silently eat draws. So each run polls for ~13
+# minutes and the schedule overlaps them, giving continuous cover from an
+# unreliable trigger.
+
+on:
+  schedule:
+    # Every 10 minutes; each run works for ~13, so runs deliberately overlap.
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+# Overlapping runs are harmless — every action is idempotent and a late caller
+# just loses the race — so let them overlap rather than cancelling a run that is
+# mid-settle.
+concurrency:
+  group: keeper
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  keep:
+    runs-on: ubuntu-latest
+    # Bounded well above the loop so a hung relayer cannot burn Actions minutes.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: contracts/package-lock.json
+
+      - name: Install
+        working-directory: contracts
+        run: npm ci
+
+      - name: Run keeper
+        working-directory: contracts
+        env:
+          # A BURNER. This repository is public, and the deployer key owns the
+          # contracts — never reuse it here. The keeper only needs gas.
+          PRIVATE_KEY: ${{ secrets.KEEPER_PRIVATE_KEY }}
+          ALCHEMY_API_KEY_SEPOLIA: ${{ secrets.SEPOLIA_RPC_URL }}
+          KEEPER_MINUTES: "13"
+          KEEPER_POLL_SECONDS: "45"
+        run: npx hardhat run scripts/keeper.ts --network sepolia

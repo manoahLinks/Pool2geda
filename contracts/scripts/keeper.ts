@@ -34,7 +34,30 @@ const LOW_BALANCE = ethers.parseEther("0.01");
 const ts = () => new Date().toISOString().slice(11, 19);
 const log = (m: string) => console.log(`[${ts()}] ${m}`);
 
+/// Fail on the real problem, not twelve frames into an RPC call.
+///
+/// A missing secret used to surface as `HH110: invalid project id` from Infura,
+/// because an empty ALCHEMY_API_KEY_SEPOLIA falls through to a placeholder URL.
+/// That is a long way from "you did not add the secret", and CI logs are the
+/// worst possible place to debug indirection.
+function preflight() {
+  if (!process.env.CI) return; // locally, credentials come from `hardhat vars`
+  const missing: string[] = [];
+  if (!process.env.PRIVATE_KEY) missing.push("KEEPER_PRIVATE_KEY");
+  if (!process.env.ALCHEMY_API_KEY_SEPOLIA) missing.push("SEPOLIA_RPC_URL");
+  if (missing.length === 0) return;
+  throw new Error(
+    `Missing repository secret(s): ${missing.join(", ")}.\n` +
+      `Add them under Settings -> Secrets and variables -> Actions.\n` +
+      `  KEEPER_PRIVATE_KEY  a funded Sepolia key, bare hex or 0x-prefixed\n` +
+      `  SEPOLIA_RPC_URL     a full https RPC URL, or a bare Alchemy key\n` +
+      `A secret that exists prints as *** in the env block above; a blank there ` +
+      `means it was never created.`
+  );
+}
+
 async function main() {
+  preflight();
   await fhevm.initializeCLIApi();
 
   const [signer] = await ethers.getSigners();

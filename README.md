@@ -4,7 +4,7 @@
 
 A confidential port of [PoolTogether v5](https://github.com/GenerationSoftware/pt-v5-prize-pool) onto the [Zama Protocol](https://docs.zama.org/protocol) (FHEVM). Deposit, earn odds on a recurring prize draw, withdraw your full principal whenever you like. Balances, odds, winnings and the identity of each winner stay encrypted on-chain.
 
-- **Live app:** _not yet deployed — see [Status](#status)_
+- **Live app:** **https://pool2geda.vercel.app**
 - **Network:** Ethereum Sepolia (chain `11155111`)
 - **Contracts:** [see below](#deployed-contracts)
 
@@ -237,7 +237,7 @@ Requires Node 20 or 22.
 # Contracts
 cd contracts
 npm install
-npx hardhat test                    # 15 tests on the FHEVM mock coprocessor
+npx hardhat test                    # 24 tests on the FHEVM mock coprocessor
 
 # Deploy (writes web/.env automatically)
 npx hardhat vars set PRIVATE_KEY
@@ -279,7 +279,7 @@ Every published `@openzeppelin/confidential-contracts` release through 0.5.1 dec
 Verification comes in two layers, and it is worth being exact about which is
 which, because they prove different things.
 
-**Layer 1 — 15 tests on the FHEVM mock.** `npx hardhat test`. The suite runs
+**Layer 1 — 24 tests on the FHEVM mock.** `npx hardhat test`. The suite runs
 against `@fhevm/hardhat-plugin`'s local mock coprocessor and is gated on it
 (`if (!fhevm.isMock) this.skip()`), so it never touches the relayer or the KMS.
 What it proves is the *logic*: TWAB accounting, the winner predicate, no-loss
@@ -296,7 +296,7 @@ credit. Latencies and gas are tabulated below.
 Neither layer alone is sufficient. Together they cover the logic and the
 cryptography.
 
-### Layer 1 — 15 tests on the FHEVM mock
+### Layer 1 — 24 tests on the FHEVM mock
 
 `npx hardhat test`. Notable cases:
 
@@ -351,11 +351,17 @@ The Zama SDK is loaded on demand rather than at page load, cutting the eager dow
 
 ## Status
 
-**Working and verified:** contracts, 15/15 tests, live Sepolia deployment, and the complete relayer round trip including on-chain KMS proof verification.
+**Working and verified:** contracts, 24/24 tests, a live Sepolia deployment, the complete relayer round trip including on-chain KMS proof verification, a public URL, and an unattended keeper.
+
+The keeper is the part worth pointing at. Rounds close and settle on a schedule
+with nobody watching — a representative run crossed 86 dead periods in a single
+614k-gas call, then closed the next round 24 seconds after it expired, decrypted
+its two public figures and proved them back on-chain via `checkSignatures` for
+406k gas. The pool has since run for fifty consecutive rounds without
+intervention.
 
 **Not yet done:**
-- **No public URL.** The frontend builds and runs locally but is not deployed.
-- **The browser flow has not been driven by a wallet.** The relayer paths are proven from Node via the spike; the in-browser SDK path is verified by compilation and module resolution only.
+- **The browser flow has not been fully driven by a wallet.** Deposit and decryption run through `@zama-fhe/sdk` in the browser; the relayer round trips are proven from Node via the spike, and the in-browser path still needs a recorded end-to-end pass.
 - Demonstration video and write-up.
 
 ### Known limitations
@@ -377,15 +383,19 @@ The Zama SDK is loaded on demand rather than at page load, cutting the eager dow
 contracts/
   contracts/
     ConfidentialPrizePool.sol      the core — 525 lines, heavily commented
-    ConfidentialUSD.sol            ERC-7984 wrapper, the confidentiality boundary
-    TestUSD.sol                    ERC-20 + faucet
+    ConfidentialUSD.sol            standalone ERC-7984 + faucet, confidential from birth
+    IConfidentialYieldSource.sol   the seam a real yield source implements
+    yield/StreamingYieldSource.sol simulated accrual, funds the prize reserve
+    yield/AdminFundedYieldSource.sol  hand-funded reference implementation
+    alt/                           the ERC-20 wrapper path, kept for reference
     vendor/UniformRandomNumber.sol vendored from PoolTogether (GPL-3.0)
-  test/                            15 tests, real FHE pipeline
+  test/                            24 tests on the FHEVM mock
   deploy/  scripts/
 web/
   src/lib/zama.ts                  SDK construction, loaded on demand
   src/lib/decrypt.ts               user + public decryption, with retry
-  src/components/Guilloche.tsx     rosettes generated from on-chain values
+  src/components/Rosette.tsx        patterns generated from ciphertext handles
+.github/workflows/keeper.yml       closes and settles rounds unattended
 ```
 
 ## Licence
